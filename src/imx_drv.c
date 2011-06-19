@@ -141,14 +141,15 @@ static SymTabRec IMXChipsets[] = {
     {-1, NULL }
 };
 
-#define	OPTION_STR_FBDEV		"fbdev"
-#define	OPTION_STR_NOACCEL		"NoAccel"
-#define	OPTION_STR_ACCELMETHOD	"AccelMethod"
-#define	OPTION_STR_BACKEND		"Backend"
+#define OPTION_STR_FBDEV		"fbdev"
+#define OPTION_STR_NOACCEL		"NoAccel"
+#define OPTION_STR_ACCELMETHOD	"AccelMethod"
+#define OPTION_STR_BACKEND		"Backend"
 #define OPTION_STR_COMPOSITING	"Compositing"
-#define	OPTION_STR_SHADOW_FB	"ShadowFB"
-#define	OPTION_STR_ROTATE		"Rotate"
-#define	OPTION_STR_DEBUG		"Debug"
+#define OPTION_STR_XV_BILINEAR	"XvBilinear"
+#define OPTION_STR_SHADOW_FB	"ShadowFB"
+#define OPTION_STR_ROTATE		"Rotate"
+#define OPTION_STR_DEBUG		"Debug"
 
 static const OptionInfoRec IMXOptions[] = {
 	{ OPTION_FBDEV,			OPTION_STR_FBDEV,		OPTV_STRING,	{0},	FALSE },
@@ -156,6 +157,7 @@ static const OptionInfoRec IMXOptions[] = {
 	{ OPTION_ACCELMETHOD,	OPTION_STR_ACCELMETHOD,	OPTV_STRING,	{0},	FALSE },
 	{ OPTION_BACKEND,		OPTION_STR_BACKEND,		OPTV_STRING,	{0},	FALSE },
 	{ OPTION_COMPOSITING,	OPTION_STR_COMPOSITING,	OPTV_BOOLEAN,	{0},	FALSE },
+	{ OPTION_XV_BILINEAR,	OPTION_STR_XV_BILINEAR,	OPTV_BOOLEAN,	{0},	FALSE },
 	{ OPTION_SHADOW_FB,		OPTION_STR_SHADOW_FB,	OPTV_BOOLEAN,	{0},	FALSE },
 	{ OPTION_ROTATE,		OPTION_STR_ROTATE,		OPTV_STRING,	{0},	FALSE },
 	{ OPTION_DEBUG,			OPTION_STR_DEBUG,		OPTV_BOOLEAN,	{0},	FALSE },
@@ -567,6 +569,8 @@ IMXPreInit(ScrnInfoPtr pScrn, int flags)
 	}
 
 #if IMX_XVIDEO_ENABLE
+
+	fPtr->use_bilinear_filtering = xf86ReturnOptValBool(fPtr->options, OPTION_XV_BILINEAR, TRUE);
 
 	/* Register adaptors in the reverse order we want them enumerated. */
 	/* xserver/hw/xfree86/common/xf86xv.c:xf86XVListGenericAdaptors() lists them in reverse. */

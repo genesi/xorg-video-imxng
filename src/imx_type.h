@@ -64,6 +64,7 @@ typedef enum {
 	OPTION_ACCELMETHOD,
 	OPTION_BACKEND,
 	OPTION_COMPOSITING,
+	OPTION_XV_BILINEAR,
 	OPTION_SHADOW_FB,
 	OPTION_ROTATE,
 	OPTION_DEBUG,
@@ -109,6 +110,7 @@ typedef struct {
 	C2D_SURFACE						xvSurf[IMXXV_NUM_PORTS];
 	C2D_SURFACE						xvSurfAux[IMXXV_NUM_PORTS];
 	Bool							report_split[IMXXV_NUM_PORTS];
+	Bool							use_bilinear_filtering;
 
 	intptr_t						phys_ptr[IMXXV_NUM_PHYS_BUFFERS];
 	void*							mapping[IMXXV_NUM_PHYS_BUFFERS];

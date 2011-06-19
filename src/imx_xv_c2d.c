@@ -146,10 +146,10 @@ static XF86AttributeRec imxPortAttribute[] =
 		.name = "XV_COLORKEY"
     },
     {
-        .flags = XvSettable,
-        .min_value = 0,
+		.flags = XvSettable,
+		.min_value = 0,
 		.max_value = 0,
-        .name = "XV_SET_DEFAULTS"
+		.name = "XV_SET_DEFAULTS"
     }
 };
 
@@ -732,13 +732,8 @@ IMXXVPutImage(
 		z2dSetDither(imxPtr->xvGpuContext, 1);
 	}
 
-#if 0
-	const Bool stretch_blit =
-		src_w != drw_w ||
-		src_h != drw_h;
-#else
-	const Bool stretch_blit = 0;
-#endif
+	const Bool stretch_blit = imxPtr->use_bilinear_filtering ?
+		(src_w != drw_w || src_h != drw_h) : FALSE;
 
 	if (stretch_blit) {
 		z2dSetStretchMode(imxPtr->xvGpuContext, C2D_STRETCH_BILINEAR_SAMPLING);
@@ -1039,43 +1034,17 @@ IMXXVInitAdaptorC2D(
 	z2dSetBlendMode		= (Z2DSetBlendMode)		dlsym(library, "c2dSetBlendMode");
 	z2dSetDither		= (Z2DSetDither)		dlsym(library, "c2dSetDither");
 
-	xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-		"z2dCreateContext: %p\n"
-		"z2dDestroyContext: %p\n"
-		"z2dSurfAlloc: %p\n"
-		"z2dSurfFree: %p\n"
-		"z2dSurfLock: %p\n"
-		"z2dSurfUnlock: %p\n"
-		"z2dSetDstSurface: %p\n"
-		"z2dSetSrcSurface: %p\n"
-		"z2dSetBrushSurface: %p\n"
-		"z2dSetMaskSurface: %p\n"
-		"z2dSetDstRectangle: %p\n"
-		"z2dSetSrcRectangle: %p\n"
-		"z2dSetDstClipRect: %p\n"
-		"z2dDrawBlit: %p\n"
-		"z2dFlush: %p\n"
-		"z2dSetStretchMode: %p\n"
-		"z2dSetBlendMode: %p\n"
-		"z2dSetDither: %p\n",
-		z2dCreateContext,
-		z2dDestroyContext,
-		z2dSurfAlloc,
-		z2dSurfFree,
-		z2dSurfLock,
-		z2dSurfUnlock,
-		z2dSetDstSurface,
-		z2dSetSrcSurface,
-		z2dSetBrushSurface,
-		z2dSetMaskSurface,
-		z2dSetDstRectangle,
-		z2dSetSrcRectangle,
-		z2dSetDstClipRect,
-		z2dDrawBlit,
-		z2dFlush,
-		z2dSetStretchMode,
-		z2dSetBlendMode,
-		z2dSetDither);
+	const char* err = dlerror();
+
+	if (NULL != err) {
+
+		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+			"IMXXVInitAdaptor failed to load symbol from C2D Z160 library (dlerror: %s)\n",
+			err);
+
+		dlclose(library);
+		return 0;
+	}
 
 	IMXPtr imxPtr = IMXPTR(pScrn);
 
@@ -1098,6 +1067,7 @@ IMXXVInitAdaptorC2D(
 				"IMXXVInitAdaptor failed to acquire GPU context (code: 0x%08x)\n",
 				r);
 
+			dlclose(library);
 			return 0;
 		}
 
@@ -1126,6 +1096,7 @@ IMXXVInitAdaptorC2D(
 				"IMXXVInitAdaptor failed to allocate surface for screen due to unsupported bpp (%d)\n",
 				pScrn->bitsPerPixel);
 
+			dlclose(library);
 			return 0;
 		}
 
@@ -1151,6 +1122,7 @@ IMXXVInitAdaptorC2D(
 				"IMXXVInitAdaptor failed to allocate surface for screen (code: 0x%08x)\n",
 				r);
 
+			dlclose(library);
 			return 0;
 		}
 	}
