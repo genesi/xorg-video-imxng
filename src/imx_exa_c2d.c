@@ -1019,7 +1019,7 @@ imxexa_update_pixmap_on_failure(
 	/* Has pixmap passed a threshold number of failures, and is its */
 	/* ratio of successful uses to failures below another threshold? */
 	if (4 < fPixmapPtr->n_failures &&
-		2 * fPixmapPtr->n_uses < fPixmapPtr->n_failures) {
+		2 * fPixmapPtr->n_failures >= 5 * fPixmapPtr->n_uses) {
 
 #if IMX_EXA_DEBUG_DEMOTION
 

@@ -27,7 +27,7 @@
 
 #define IMXXV_VSYNC_ENABLE		0	/* flag: wait for vsync before showing a frame */
 #define IMXXV_VSYNC_NUM_RETRIES	0	/* max num of vsync retries due to syscall interrupts */
-#define IMXXV_VSYNC_DEBUG		0	/* flag: report wait-for-vsync ioctl error codes */
+#define IMXXV_VSYNC_DEBUG		0	/* flag: report wait-for-vsync ioctl errors */
 
 #include <xf86.h>
 #include <xf86xv.h>
@@ -238,12 +238,12 @@ imxxv_find_port_attribute(
 	return -1;
 }
 
+#if IMXXV_VSYNC_ENABLE
+
 static inline void
 imxxv_wait_for_vsync(
 	ScrnInfoPtr pScrn)
 {
-#if IMXXV_VSYNC_ENABLE
-
 	const int fd = fbdevHWGetFD(pScrn);
 
 	if (0 > fd) {
@@ -272,8 +272,10 @@ imxxv_wait_for_vsync(
 	}
 
 #endif /* IMXXV_VSYNC_DEBUG */
-#endif /* IMXXV_VSYNC_ENABLE */
+
 }
+
+#endif /* IMXXV_VSYNC_ENABLE */
 
 static inline int
 imxxv_port_idx_from_cookie(
@@ -812,8 +814,12 @@ IMXXVPutImage(
 		z2dSetDstRectangle(imxPtr->xvGpuContext, &rectDst);
 	}
 
-	/* Wait for vsync to avoid output tearing. */
+#if IMXXV_VSYNC_ENABLE
+
+	/* Wait for vsync to avoid frame tearing. */
 	imxxv_wait_for_vsync(pScrn);
+
+#endif /* IMXXV_VSYNC_ENABLE */
 
 	int num_box = RegionNumRects(clipBoxes);
 	BoxPtr box = RegionRects(clipBoxes);
@@ -1015,6 +1021,9 @@ IMXXVInitAdaptorC2D(
 		return 0;
 	}
 
+	/* Reset dlerror state. */
+	dlerror();
+
 	z2dCreateContext	= (Z2DCreateContext)	dlsym(library, "c2dCreateContext");
 	z2dDestroyContext	= (Z2DDestroyContext)	dlsym(library, "c2dDestroyContext");
 	z2dSurfAlloc		= (Z2DSurfAlloc)		dlsym(library, "c2dSurfAlloc");
@@ -1096,6 +1105,9 @@ IMXXVInitAdaptorC2D(
 				"IMXXVInitAdaptor failed to allocate surface for screen due to unsupported bpp (%d)\n",
 				pScrn->bitsPerPixel);
 
+			z2dDestroyContext(imxPtr->xvGpuContext);
+			imxPtr->xvGpuContext = NULL;
+
 			dlclose(library);
 			return 0;
 		}
@@ -1115,12 +1127,12 @@ IMXXVInitAdaptorC2D(
 
 		if (C2D_STATUS_OK != r) {
 
-			z2dDestroyContext(imxPtr->xvGpuContext);
-			imxPtr->xvGpuContext = NULL;
-
 			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 				"IMXXVInitAdaptor failed to allocate surface for screen (code: 0x%08x)\n",
 				r);
+
+			z2dDestroyContext(imxPtr->xvGpuContext);
+			imxPtr->xvGpuContext = NULL;
 
 			dlclose(library);
 			return 0;
