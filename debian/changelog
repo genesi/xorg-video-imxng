@@ -2,7 +2,7 @@ xserver-xorg-video-imx (2.0.0-20110518) maverick; urgency=low
 
   * rewrite using AMD's C2D API
 
- -- Martin Krastev <martin.krastev@genesi-usa.com>  Wen, 18 May 2011 22:15:33 +0200
+ -- Martin Krastev <martin.krastev@genesi-usa.com>  Wed, 18 May 2011 22:15:33 +0200
 
 xserver-xorg-video-imx (1.0.0-20110228) maverick; urgency=low
 
