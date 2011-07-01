@@ -837,7 +837,11 @@ IMXXVPutImage(
 
 		if (split_blit) {
 			
-			if (rectSrc.width) {
+			if (rectSrc.width &&
+				rectDst.x < box->x2 &&
+				rectDst.y < box->y2 &&
+				rectDst.x + rectDst.width > box->x1 &&
+				rectDst.y + rectDst.height > box->y1) {
 
 				z2dSetSrcSurface(imxPtr->xvGpuContext, imxPtr->xvSurf[port_idx]);
 
@@ -848,6 +852,14 @@ IMXXVPutImage(
 
 				if (C2D_STATUS_OK != r)
 					break;
+			}
+
+			if (rectDstAux.x >= box->x2 ||
+				rectDstAux.y >= box->y2 ||
+				rectDstAux.x + rectDstAux.width <= box->x1 ||
+				rectDstAux.y + rectDstAux.height <= box->y1) {
+
+				continue;
 			}
 
 			z2dSetSrcSurface(imxPtr->xvGpuContext, imxPtr->xvSurfAux[port_idx]);
