@@ -32,12 +32,7 @@
 #define IMX_IPU_ENABLE		1
 #define IMX_DEBUG_MASTER	1
 
-#if IMX_XVIDEO_ENABLE
 #include <xf86xv.h>
-#if IMX_IPU_ENABLE
-#include <mxc_ipu_hl_lib.h>
-#endif /* IMX_IPU_ENABLE */
-#endif /* IMX_XVIDEO_ENABLE */
 
 /* Preparation for the inclusion of c2d_api.h */
 #ifndef _LINUX
@@ -101,8 +96,6 @@ typedef struct {
 	int								nDGAMode;
 	OptionInfoPtr					options;
 
-#if IMX_XVIDEO_ENABLE
-
 	DevUnion						xvPortPrivate[IMXXV_NUM_PORTS];
 	C2D_CONTEXT						xvGpuContext;
 	C2D_SURFACE						xvScreenSurf;
@@ -117,29 +110,6 @@ typedef struct {
 	size_t							mapping_len[IMXXV_NUM_PHYS_BUFFERS];
 	size_t							mapping_offset[IMXXV_NUM_PHYS_BUFFERS];
 	unsigned						num_phys;
-
-#if IMX_IPU_ENABLE
-
-	DevUnion						ipuPortPrivate[1];
-	Bool							isInit;
-	short							SrcX;
-	short							SrcY;
-	short							DstX;
-	short							DstY;
-	short							SrcW;
-	short							SrcH;
-	short							DstW;
-	short							DstH;
-	int								Width;
-	int								Height;
-	char							fb_background[12];
-	ipu_lib_input_param_t			input_param;
-	ipu_lib_output_param_t			output_para;
-	int								next_update_idx;
-	ipu_lib_handle_t				ipu_handle;
-	CARD32							colour_key;
-#endif /* IMX_IPU_ENABLE */
-#endif /* IMX_XVIDEO_ENABLE */
 
 	/* EXA acceleration */
 	imxexa_backend_t				backend;

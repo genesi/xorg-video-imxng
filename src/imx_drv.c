@@ -66,9 +66,7 @@
 
 #include "imx_type.h"
 
-#if IMX_XVIDEO_ENABLE
 #include "xf86xv.h"
-#endif
 
 static Bool debug = 0;
 
@@ -93,10 +91,7 @@ static void	IMXPointerMoved(int index, int x, int y);
 static Bool	IMXDGAInit(ScrnInfoPtr pScrn, ScreenPtr pScreen);
 static Bool	IMXDriverFunc(ScrnInfoPtr pScrn, xorgDriverFuncOp op, pointer ptr);
 
-#if IMX_XVIDEO_ENABLE
 extern int IMXXVInitAdaptorC2D(ScrnInfoPtr, XF86VideoAdaptorPtr **);
-extern int IMXXVInitAdaptorIPU(ScrnInfoPtr, XF86VideoAdaptorPtr **);
-#endif /* IMX_XVIDEO_ENABLE */
 
 /* for EXA (X acceleration) */
 extern void IMX_EXA_GetRec(ScrnInfoPtr pScrn);
@@ -568,19 +563,13 @@ IMXPreInit(ScrnInfoPtr pScrn, int flags)
 		}
 	}
 
-#if IMX_XVIDEO_ENABLE
-
 	fPtr->use_bilinear_filtering = xf86ReturnOptValBool(fPtr->options, OPTION_XV_BILINEAR, TRUE);
 
 	/* Register adaptors in the reverse order we want them enumerated. */
 	/* xserver/hw/xfree86/common/xf86xv.c:xf86XVListGenericAdaptors() lists them in reverse. */
-	xf86XVRegisterGenericAdaptorDriver(IMXXVInitAdaptorIPU);
-
 	if (IMXEXA_BACKEND_NONE != fPtr->backend) {
 		xf86XVRegisterGenericAdaptorDriver(IMXXVInitAdaptorC2D);
 	}
-
-#endif
 
 	/* Load shadow if needed */
 	if (fPtr->shadowFB) {
@@ -912,16 +901,12 @@ IMXScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
 	fPtr->CloseScreen = pScreen->CloseScreen;
 	pScreen->CloseScreen = IMXCloseScreen;
 
-#if IMX_XVIDEO_ENABLE
-
 	XF86VideoAdaptorPtr *ptr;
 	int n = xf86XVListGenericAdaptors(pScrn, &ptr);
 
 	if (0 < n) {
 		xf86XVScreenInit(pScreen, ptr, n);
 	}
-
-#endif /* IMX_XVIDEO_ENABLE */
 
 	TRACE_EXIT("IMXScreenInit");
 

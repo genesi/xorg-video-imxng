@@ -23,9 +23,9 @@
 # -avoid-version prevents gratuitous .0.0.0 version numbers on the end
 # _ladir passes a dummy rpath to libtool so the thing will actually link
 
-AM_CFLAGS = @XORG_CFLAGS@ -DRENDER -DCOMPOSITE -DMITSHM -DIMX_XVIDEO_ENABLE=1 -marm -Wall -I/usr/src/linux/include
+AM_CFLAGS = @XORG_CFLAGS@ -DRENDER -DCOMPOSITE -DMITSHM -marm -Wall -I/usr/src/linux-headers-2.6.31.14.23-efikamx/include
 AM_CCASFLAGS = @ASFLAGS@
-imx_drv_la_LDFLAGS = -module -avoid-version -lipu -ldl
+imx_drv_la_LDFLAGS = -module -avoid-version -ldl
 
 imx_drv_la_LTLIBRARIES = imx_drv.la
 imx_drv_ladir = @moduledir@/drivers
@@ -38,7 +38,6 @@ imx_drv_la_SOURCES = \
 	imx_ext.c \
 	imx_ext.h \
 	imx_xv_c2d.c \
-	imx_xv_ipu.c \
 	imx_exa_c2d.c
 
 imx_drv_la_SOURCES += \
@@ -46,9 +45,5 @@ imx_drv_la_SOURCES += \
 
 if NEON
 imx_drv_la_SOURCES += \
-	machine/cpu-features.h \
-	memcpy.S \
-	memset.S \
-	memcmp.S \
 	i420_yuyv.S
 endif

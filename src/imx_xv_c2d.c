@@ -23,8 +23,6 @@
  * SOFTWARE.
  */
 
-#if IMX_XVIDEO_ENABLE
-
 #define IMXXV_VSYNC_ENABLE		0	/* flag: wait for vsync before showing a frame */
 #define IMXXV_VSYNC_NUM_RETRIES	0	/* max num of vsync retries due to syscall interrupts */
 #define IMXXV_VSYNC_DEBUG		0	/* flag: report wait-for-vsync ioctl errors */
@@ -1150,5 +1148,3 @@ IMXXVInitAdaptorC2D(
 
 	return nAdaptor;
 }
-
-#endif /* IMX_XVIDEO_ENABLE */
