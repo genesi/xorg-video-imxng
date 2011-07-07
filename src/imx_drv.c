@@ -91,6 +91,7 @@ static void	IMXPointerMoved(int index, int x, int y);
 static Bool	IMXDGAInit(ScrnInfoPtr pScrn, ScreenPtr pScreen);
 static Bool	IMXDriverFunc(ScrnInfoPtr pScrn, xorgDriverFuncOp op, pointer ptr);
 
+/* for XV acceleration */
 extern int IMXXVInitAdaptorC2D(ScrnInfoPtr, XF86VideoAdaptorPtr **);
 
 /* for EXA (X acceleration) */
@@ -425,9 +426,10 @@ IMXPreInit(ScrnInfoPtr pScrn, int flags)
 		if (!dlopen(lib_name, RTLD_NOW | RTLD_GLOBAL))
 		{
 			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-				"failed to load GPU acceleration library %s, dlerror: %s\n",
-				lib_name, dlerror());
-			return FALSE;
+				"failed to load GPU acceleration library (dlerror: %s)\n",
+				dlerror());
+
+			fPtr->backend = IMXEXA_BACKEND_NONE;
 		}
 	}
 
@@ -555,12 +557,9 @@ IMXPreInit(ScrnInfoPtr pScrn, int flags)
 	}
 
 	/* Perform EXA pre-init */
-	if (IMXEXA_BACKEND_NONE != fPtr->backend) {
-
-		if (!IMX_EXA_PreInit(pScrn)) {
-			IMXFreeRec(pScrn);
-			return FALSE;
-		}
+	if (!IMX_EXA_PreInit(pScrn)) {
+		IMXFreeRec(pScrn);
+		return FALSE;
 	}
 
 	fPtr->use_bilinear_filtering = xf86ReturnOptValBool(fPtr->options, OPTION_XV_BILINEAR, TRUE);
@@ -828,26 +827,27 @@ IMXScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
 	xf86SetBlackWhitePixels(pScreen);
 
 	/* INITIALIZE ACCELERATION BEFORE INIT FOR BACKING STORE AND SOFTWARE CURSOR */ 
-	if (IMXEXA_BACKEND_NONE != fPtr->backend) {
+	if (!IMX_EXA_ScreenInit(scrnIndex, pScreen)) {
 
-		if (!IMX_EXA_ScreenInit(scrnIndex, pScreen)) {
-
-			fPtr->backend = IMXEXA_BACKEND_NONE;
-		}
-		else {
-			/* If acceleration was enabled, then initialize the extension. */
-			IMX_EXT_Init();
-		}
+	    xf86DrvMsg(scrnIndex, X_ERROR,
+		       "IMX EXA failed to initialize screen.\n");
+	    return FALSE;
 	}
 
-	/* note if acceleration is in use */
+	/* If acceleration was enabled, then initialize the extension. */
+	if (IMXEXA_BACKEND_NONE != fPtr->backend) {
+
+		IMX_EXT_Init();
+	}
+
+	/* Note if acceleration is in use. */
 	if (IMXEXA_BACKEND_NONE != fPtr->backend) {
 
 		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "IMX EXA acceleration setup successful\n");
 
 	} else {
 
-		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "No acceleration in use\n");
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "IMX EXA acceleration setup failed - no acceleration in use\n");
 	}
 	miInitializeBackingStore(pScreen);
 	xf86SetBackingStore(pScreen);

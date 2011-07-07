@@ -38,20 +38,17 @@
 
 #include <C2D/c2d_api.h>
 
-/* fixme: included just to grab a few hw caps */
-#include <z160.h>
-
 #include "imx_type.h"
 
 #if IMX_EXA_VERSION_COMPILED < IMX_EXA_VERSION(2, 5, 0)
 #error This driver can be built only against EXA version 2.5.0 or higher.
 #endif
 
-/* Establish minimal height of pixel surfaces for accelerating operations on Z160. For stability reasons.*/
+/* Minimal height of pixel surfaces for accelerating operations on Z160. For stability reasons.*/
 #define	IMX_EXA160_MIN_SURF_HEIGHT			32
-/* Establish minimal area of pixel surfaces for accelerating operations on Z430. For efficiency reasons. */
+/* Minimal area of pixel surfaces for accelerating operations on Z430. For efficiency reasons. */
 #define IMX_EXA430_MIN_SURF_AREA			1024 /* The equivalent of 32^2 */
-/* Establish maximal dimension of pixel surfaces for accelerating operations on any gpu backend. */
+/* Maximal dimension of pixel surfaces for accelerating operations on any gpu backend. */
 #define IMX_EXA_MAX_SURF_DIM 				2048
 
 /* This flag must be enabled to perform any debug logging */
@@ -66,9 +63,9 @@
 #define	IMX_EXA_DEBUG_CHECK_COMPOSITE		(0 && IMX_EXA_DEBUG_MASTER)
 #define	IMX_EXA_DEBUG_PREPARE_COMPOSITE		(0 && IMX_EXA_DEBUG_MASTER)
 #define	IMX_EXA_DEBUG_COMPOSITE				(0 && IMX_EXA_DEBUG_MASTER)
-#define IMX_EXA_DEBUG_EVICTION				(1 && IMX_EXA_DEBUG_MASTER)
-#define IMX_EXA_DEBUG_DEMOTION				(1 && IMX_EXA_DEBUG_MASTER)
-#define IMX_EXA_DEBUG_TRACE					(1 && IMX_EXA_DEBUG_MASTER)
+#define IMX_EXA_DEBUG_EVICTION				(0 && IMX_EXA_DEBUG_MASTER)
+#define IMX_EXA_DEBUG_DEMOTION				(0 && IMX_EXA_DEBUG_MASTER)
+#define IMX_EXA_DEBUG_TRACE					(0 && IMX_EXA_DEBUG_MASTER)
 
 #if IMX_EXA_DEBUG_TRACE
 
@@ -368,7 +365,7 @@ imxexa_string_from_c2d_format(
 	case C2D_COLOR_YUY2:
 		return "C2D_COLOR_YUY2";
 
-	/* Please the compiler. */
+	/* Pacify the compiler. */
 	default:
 		break;
 	}
@@ -456,7 +453,7 @@ imxexa_unregister_pixmap_from_driver(
 		return;
 
 	/* Unlink pixmap from siblings. If pixmap was last in list and thus */
-	/* primary eviction candidate - update eviction candidates header. */
+	/* primary eviction candidate - update eviction candidates head. */
 	if (NULL != fPixmapPtr->prev)
 		fPixmapPtr->prev->next = fPixmapPtr->next;
 	else
@@ -640,14 +637,6 @@ imxexa_gpu_context_release(
 			"Unable to sync GPU (code: 0x%08x)\n", r);
 	}
 
-	/* Verify that we have just the screen pixmap left. For diagnostics. */
-	if (NULL != fPtr->pFirstPix && (NULL != fPtr->pFirstPix->next ||
-		fPtr->screenSurf != fPtr->pFirstPix->surf)) {
-
-		xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
-			"Encountered abandoned pixmaps\n");
-	}
-
 	/* Dispose of the screen surface. */
 	if (NULL != fPtr->screenSurf) {
 
@@ -684,6 +673,9 @@ imxexa_gpu_context_acquire(
 	/* Access driver specific data associated with the screen. */
 	IMXPtr imxPtr = IMXPTR(pScrn);
 	IMXEXAPtr fPtr = IMXEXAPTR(imxPtr);
+
+	if (IMXEXA_BACKEND_NONE == imxPtr->backend)
+		return FALSE;
 
 	if (NULL != fPtr->gpuContext)
 		return TRUE;
@@ -914,9 +906,9 @@ imxexa_unlock_surface(
 
 #if IMX_EXA_DEBUG_EVICTION
 
-	xf86DrvMsg(0, X_INFO,
-		"imxexa_reinstate_pixmap %s\n",
-		imxexa_string_from_priv_pixmap(fPixmapPtr));
+		xf86DrvMsg(0, X_INFO,
+			"imxexa_reinstate_pixmap %s\n",
+			imxexa_string_from_priv_pixmap(fPixmapPtr));
 #endif
 
 	}
@@ -1016,6 +1008,7 @@ imxexa_update_pixmap_on_failure(
 		return;
 	}
 
+#if 0
 	/* Has pixmap passed a threshold number of failures, and is its */
 	/* ratio of successful uses to failures below another threshold? */
 	if (4 < fPixmapPtr->n_failures &&
@@ -1023,13 +1016,14 @@ imxexa_update_pixmap_on_failure(
 
 #if IMX_EXA_DEBUG_DEMOTION
 
-	xf86DrvMsg(0, X_INFO,
-		"imxexa_update_pixmap_on_failure demoted offscreen pixmap after %u uses, %u failures\n",
-		fPixmapPtr->n_uses, fPixmapPtr->n_failures);
+		xf86DrvMsg(0, X_INFO,
+			"imxexa_update_pixmap_on_failure demoted offscreen pixmap after %u uses, %u failures\n",
+			fPixmapPtr->n_uses, fPixmapPtr->n_failures);
 #endif
 
 		imxexa_evict_pixmap(fPtr, fPixmapPtr);
 	}
+#endif
 }
 
 static inline void
@@ -1205,6 +1199,9 @@ IMXEXACreatePixmap2(
 		return NULL;
 	}
 
+	if (NULL == fPtr->gpuContext)
+		return fPixmapPtr;
+
 	/* Attempt to allocate from offscreen if surface geometry and bitsPerPixel are eligible. */
 	if (IMX_EXA_MAX_SURF_DIM >= width && IMX_EXA_MAX_SURF_DIM >= height &&
 		(IMXEXA_BACKEND_Z160 == imxPtr->backend && IMX_EXA160_MIN_SURF_HEIGHT <= height ||
@@ -1324,7 +1321,8 @@ IMXEXADestroyPixmap(
 	/* Is pixmap allocated in system memory or does pixmap have backing storage? */
 	if (NULL != fPixmapPtr->sysPtr) {
 
-		free(fPixmapPtr->sysPtr);
+		if (imxPtr->fbstart != fPixmapPtr->sysPtr)
+			free(fPixmapPtr->sysPtr);
 
 #if IMX_EXA_DEBUG_PIXMAPS
 
@@ -1377,21 +1375,28 @@ IMXEXAModifyPixmapHeader(
 #endif
 
 	/* Refuse to patch pixmaps receiving a custom data ptr of unknown origin. */
-	if (NULL != pPixData && pPixData != fPtr->screenSurfDef.host && pPixData != fPixmapPtr->sysPtr) {
+	if (NULL != pPixData && pPixData != imxPtr->fbstart && pPixData != fPixmapPtr->sysPtr) {
 
 #if IMX_EXA_DEBUG_PIXMAPS
 
 		xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-			"IMXEXAModifyPixmapHeader detected attempt to patch pixmap with foreign pixdata; bailing out\n",
-			pPixData, pPixmap, fPixmapPtr);
+			"IMXEXAModifyPixmapHeader detected attempt to patch pixmap with foreign pixdata; bailing out\n");
 #endif
 		return FALSE;
 	}
 
 	/* Is this an attempt to patch the screen pixmap? */
-	if (pPixData == fPtr->screenSurfDef.host) {
+	if (pPixData == imxPtr->fbstart) {
 
-		/* Is pixmap not using the screen surface? */
+		if (NULL == fPtr->gpuContext) {
+
+			fPixmapPtr->width = width;
+			fPixmapPtr->height = height;
+
+			fPixmapPtr->sysPitchBytes = devKind;
+			fPixmapPtr->sysPtr = pPixData;
+		}
+		else /* Is pixmap not using the screen surface? */
 		if (fPtr->screenSurf != fPixmapPtr->surf) {
 
 			/* Does pixmap already have a genuine surface? */
@@ -1663,13 +1668,22 @@ IMXEXAFinishAccess(
 	/* Access screen info associated with this pixmap. */
 	ScrnInfoPtr pScrn = xf86Screens[pPixmap->drawable.pScreen->myNum];
 
+#if 0
 	/* Access driver specific data associated with the screen. */
 	IMXPtr imxPtr = IMXPTR(pScrn);
 	IMXEXAPtr fPtr = IMXEXAPTR(imxPtr);
+#endif
 
 	/* Access driver private data associated with pixmap. */
 	IMXEXAPixmapPtr fPixmapPtr =
 		(IMXEXAPixmapPtr) exaGetPixmapDriverPrivate(pPixmap);
+
+	if (!imxexa_can_accelerate_pixmap(fPixmapPtr)) {
+
+		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+			"IMXEXAFinishAccess called with sysmem pixmap\n");
+		return;
+	}
 
 	/* Is the surface neither locked nor evicted? */
 	if (NULL == fPixmapPtr->surfPtr && PIXMAP_STAMP_EVICTED != fPixmapPtr->stamp) {
@@ -2842,21 +2856,17 @@ IMX_EXA_ScreenInit(int scrnIndex, ScreenPtr pScreen)
 		return FALSE;
 	}
 
-	/* Alignment of pixmap pitch is 32 pixels for z430 */
-	/* (4 pixels for z160), but times 4 bytes max per pixel. */
-	unsigned long pixmapPitchAlign = 32 * 4;
-
 	imxPtr->exaDriverPtr->flags = EXA_OFFSCREEN_PIXMAPS;
 	imxPtr->exaDriverPtr->exa_major = EXA_VERSION_MAJOR;
 	imxPtr->exaDriverPtr->exa_minor = EXA_VERSION_MINOR;
 	imxPtr->exaDriverPtr->memoryBase = imxPtr->fbstart;
 	imxPtr->exaDriverPtr->memorySize = fbdevHWGetVidmem(pScrn);
 	imxPtr->exaDriverPtr->offScreenBase = numScreenBytes;
-	imxPtr->exaDriverPtr->pixmapOffsetAlign = Z160_ALIGN_OFFSET;
-	imxPtr->exaDriverPtr->pixmapPitchAlign = pixmapPitchAlign;
-	imxPtr->exaDriverPtr->maxPitchBytes = Z160_MAX_PITCH_BYTES;
-	imxPtr->exaDriverPtr->maxX = Z160_MAX_WIDTH - 1;
-	imxPtr->exaDriverPtr->maxY = Z160_MAX_HEIGHT - 1;
+	imxPtr->exaDriverPtr->pixmapOffsetAlign = 4096;
+	imxPtr->exaDriverPtr->pixmapPitchAlign = 32 * 4;
+	imxPtr->exaDriverPtr->maxPitchBytes = IMX_EXA_MAX_SURF_DIM * 4;
+	imxPtr->exaDriverPtr->maxX = IMX_EXA_MAX_SURF_DIM - 1;
+	imxPtr->exaDriverPtr->maxY = IMX_EXA_MAX_SURF_DIM - 1;
 
 	/* Required */
 	imxPtr->exaDriverPtr->WaitMarker = IMXEXAWaitMarker;
@@ -2906,22 +2916,8 @@ IMX_EXA_ScreenInit(int scrnIndex, ScreenPtr pScreen)
 		return FALSE;
 	}
 
-	unsigned long numAvailPixmapBytes =
-		imxPtr->exaDriverPtr->memorySize -
-		imxPtr->exaDriverPtr->offScreenBase;
-
-	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Offscreen pixmap area of %luK bytes\n", numAvailPixmapBytes / 1024);
-
-	/* Connect to the GPU. */
-	if (!imxexa_gpu_context_acquire(pScrn)) {
-
-		exaDriverFini(pScreen);
-		free(imxPtr->exaDriverPtr);
-		imxPtr->exaDriverPtr = NULL;
-
-		xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "Connecting to GPU failed.\n");
-		return FALSE;
-	}
+	/* Connect to the GPU if accelerated backend in use. */
+	imxexa_gpu_context_acquire(pScrn);
 
 	return TRUE;
 }
@@ -2935,7 +2931,7 @@ IMX_EXA_CloseScreen(int scrnIndex, ScreenPtr pScreen)
 	/* Access driver specific data associated with the screen. */
 	IMXPtr imxPtr = IMXPTR(pScrn);
 
-	/* Disconnect from the GPU. */
+	/* Disconnect from the GPU if accelerated backend in use. */
 	imxexa_gpu_context_release(pScrn);
 
 	/* EXA interface cleanup. */

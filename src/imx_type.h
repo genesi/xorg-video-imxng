@@ -29,7 +29,6 @@
 #include <xf86.h>
 #include <exa.h>
 
-#define IMX_IPU_ENABLE		1
 #define IMX_DEBUG_MASTER	1
 
 #include <xf86xv.h>
