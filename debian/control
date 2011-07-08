@@ -17,6 +17,7 @@ Build-Depends:
  automake,
  libtool,
  xutils-dev (>= 1:7.5+1),
+ libc2d-imx-dev,
 Standards-Version: 3.9.1
 
 Package: xserver-xorg-video-imx
