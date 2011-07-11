@@ -1,0 +1,5 @@
+Section "Device"
+	Identifier "IMX"
+	Driver "imx"
+	Option	"Backend" "Z430"
+EndSection
