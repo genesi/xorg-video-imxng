@@ -44,10 +44,8 @@
 #error This driver can be built only against EXA version 2.5.0 or higher.
 #endif
 
-/* Minimal height of pixel surfaces for accelerating operations on Z160. For stability reasons.*/
-#define	IMX_EXA160_MIN_SURF_HEIGHT			32
-/* Minimal area of pixel surfaces for accelerating operations on Z430. For efficiency reasons. */
-#define IMX_EXA430_MIN_SURF_AREA			1024 /* The equivalent of 32^2 */
+/* Minimal height of pixel surfaces for accelerating operations.*/
+#define	IMX_EXA_MIN_SURF_DIM				32
 /* Maximal dimension of pixel surfaces for accelerating operations on any gpu backend. */
 #define IMX_EXA_MAX_SURF_DIM 				2048
 
@@ -89,7 +87,7 @@ imxexa_surf_format_from_bpp(
 {
 	switch (bitsPerPixel) {
 
-	case 8: 
+	case 8:
 		*fmt = C2D_COLOR_8;
 		break;
 
@@ -112,7 +110,7 @@ imxexa_surf_format_from_bpp(
 	return TRUE;
 }
 
-static inline Bool 
+static inline Bool
 imxexa_surf_format_from_pict(
 	imxexa_backend_t backend,
 	PictFormatShort pictFormat,
@@ -1204,8 +1202,7 @@ IMXEXACreatePixmap2(
 
 	/* Attempt to allocate from offscreen if surface geometry and bitsPerPixel are eligible. */
 	if (IMX_EXA_MAX_SURF_DIM >= width && IMX_EXA_MAX_SURF_DIM >= height &&
-		(IMXEXA_BACKEND_Z160 == imxPtr->backend && IMX_EXA160_MIN_SURF_HEIGHT <= height ||
-		 IMXEXA_BACKEND_Z430 == imxPtr->backend && IMX_EXA430_MIN_SURF_AREA <= width * height) &&
+		width > IMX_EXA_MIN_SURF_DIM && height > IMX_EXA_MIN_SURF_DIM &&
 		imxexa_surf_format_from_bpp(imxPtr->backend, bitsPerPixel, &fPixmapPtr->surfDef.format)) {
 
         fPixmapPtr->surfDef.width = width;
