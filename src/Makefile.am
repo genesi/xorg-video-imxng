@@ -23,7 +23,7 @@
 # -avoid-version prevents gratuitous .0.0.0 version numbers on the end
 # _ladir passes a dummy rpath to libtool so the thing will actually link
 
-AM_CFLAGS = @XORG_CFLAGS@ -DRENDER -DCOMPOSITE -DMITSHM -marm -Wall -I/usr/src/linux-headers-2.6.31.14.23-efikamx/include
+AM_CFLAGS = @XORG_CFLAGS@ -DRENDER -DCOMPOSITE -DMITSHM -marm -Wall -I/usr/src/linux/include
 AM_CCASFLAGS = @ASFLAGS@
 imx_drv_la_LDFLAGS = -module -avoid-version -ldl
 
