@@ -44,7 +44,7 @@
 #error This driver can be built only against EXA version 2.5.0 or higher.
 #endif
 
-/* Minimal height of pixel surfaces for accelerating operations.*/
+/* Minimal width or height of pixel surfaces for accelerating operations.*/
 #define	IMX_EXA_MIN_SURF_DIM				32
 /* Maximal dimension of pixel surfaces for accelerating operations on any gpu backend. */
 #define IMX_EXA_MAX_SURF_DIM 				2048
@@ -595,6 +595,15 @@ imxexa_can_accelerate_pixmap(
 	/* Evicted pixmaps are reinstated on first use, report them as good for acceleration. */
 	if (NULL == fPixmapPtr->surf && PIXMAP_STAMP_EVICTED != fPixmapPtr->stamp)
 		return FALSE;
+
+#if 0
+	/* pixmaps of ridiculously small size are not efficient to use the GPU on */
+	if (fPixmapPtr->width <= IMX_EXA_MIN_SURF_DIM)
+		return FALSE;
+
+	if (fPixmapPtr->height <= IMX_EXA_MIN_SURF_DIM)
+		return FALSE;
+#endif
 
 	return TRUE;
 }
@@ -1201,12 +1210,12 @@ IMXEXACreatePixmap2(
 		return fPixmapPtr;
 
 	/* Attempt to allocate from offscreen if surface geometry and bitsPerPixel are eligible. */
-	if (IMX_EXA_MAX_SURF_DIM >= width && IMX_EXA_MAX_SURF_DIM >= height &&
-		width > IMX_EXA_MIN_SURF_DIM && height > IMX_EXA_MIN_SURF_DIM &&
+	if ( (IMX_EXA_MAX_SURF_DIM >= width) && (IMX_EXA_MAX_SURF_DIM >= height) &&
+		(width >= IMX_EXA_MIN_SURF_DIM) && (height >= IMX_EXA_MIN_SURF_DIM) &&
 		imxexa_surf_format_from_bpp(imxPtr->backend, bitsPerPixel, &fPixmapPtr->surfDef.format)) {
 
-        fPixmapPtr->surfDef.width = width;
-        fPixmapPtr->surfDef.height = height;
+		fPixmapPtr->surfDef.width = width;
+		fPixmapPtr->surfDef.height = height;
 
 		C2D_STATUS r = c2dSurfAlloc(fPtr->gpuContext, &fPixmapPtr->surf, &fPixmapPtr->surfDef);
 

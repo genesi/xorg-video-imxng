@@ -431,6 +431,13 @@ IMXPreInit(ScrnInfoPtr pScrn, int flags)
 
 			fPtr->backend = IMXEXA_BACKEND_NONE;
 		}
+		else {
+			xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+				"Using %s backend\n",
+				((fPtr->backend == IMXEXA_BACKEND_Z160) ? "Z160" :
+				((fPtr->backend == IMXEXA_BACKEND_Z430) ? "Z430" :
+				"software fallback")) );
+		}
 	}
 
 	/* ShadowFB option */
@@ -487,7 +494,7 @@ IMXPreInit(ScrnInfoPtr pScrn, int flags)
 	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "checking modes against monitor...\n");
 	{
 		DisplayModePtr mode, first = mode = pScrn->modes;
-		
+
 		if (mode != NULL) do {
 			mode->status = xf86CheckModeForMonitor(mode, pScrn->monitor);
 			mode = mode->next;
@@ -618,7 +625,7 @@ IMXShadowInit(ScreenPtr pScreen)
 {
     ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
     IMXPtr fPtr = IMXPTR(pScrn);
-    
+
     if (!shadowSetup(pScreen)) {
 	return FALSE;
     }
