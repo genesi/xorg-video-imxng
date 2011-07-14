@@ -39,13 +39,3 @@ imx_drv_la_SOURCES = \
 	imx_ext.h \
 	imx_xv_c2d.c \
 	imx_exa_c2d.c
-
-#if LGPL
-#imx_drv_la_SOURCES += \
-#	libswscale_rgb2rgb_template.c
-#
-#if NEON
-#imx_drv_la_SOURCES += \
-#	i420_yuyv.S
-#endif
-#endif
