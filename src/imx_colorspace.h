@@ -2,7 +2,7 @@
  * By the book yuv420p to yuyv422 colorspace conversion
  */
 
-static inline void i420_to_yuy2(
+static inline void i420_to_yuy2_c(
     uint8_t *dst,
     const uint8_t *ysrc,
     const uint8_t *usrc,
