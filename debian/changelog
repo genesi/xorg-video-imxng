@@ -1,3 +1,9 @@
+xserver-xorg-video-imx (2.0.0-20110714) maverick; urgency=low
+
+  * release version
+
+ -- Matt Sealey <matt@genesi-usa.com>  Thu, 14 Jul 2011 17:12:27 -0600
+
 xserver-xorg-video-imx (2.0.0-20110518) maverick; urgency=low
 
   * rewrite using AMD's C2D API

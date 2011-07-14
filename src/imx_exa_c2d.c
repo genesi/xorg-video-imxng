@@ -50,7 +50,7 @@
 #define IMX_EXA_MAX_SURF_DIM 				2048
 
 /* This flag must be enabled to perform any debug logging */
-#define IMX_EXA_DEBUG_MASTER				(1 && IMX_DEBUG_MASTER)
+#define IMX_EXA_DEBUG_MASTER				(0 && IMX_DEBUG_MASTER)
 
 #define	IMX_EXA_DEBUG_INSTRUMENT_SYNCS		(0 && IMX_EXA_DEBUG_MASTER)
 #define	IMX_EXA_DEBUG_PREPARE_SOLID			(0 && IMX_EXA_DEBUG_MASTER)
