@@ -76,11 +76,13 @@ typedef C2D_STATUS (*Z2DSetSrcRectangle)(C2D_CONTEXT a_c2dContext, C2D_RECT *a_r
 typedef C2D_STATUS (*Z2DSetDstRectangle)(C2D_CONTEXT a_c2dContext, C2D_RECT *a_rect);
 typedef C2D_STATUS (*Z2DSetDstClipRect)(C2D_CONTEXT a_c2dContext, C2D_RECT *a_clipRect);
 typedef C2D_STATUS (*Z2DDrawBlit)(C2D_CONTEXT a_c2dContext);
+typedef C2D_STATUS (*Z2DDrawRect)(C2D_CONTEXT a_c2dContext, C2D_PARAMETERS a_drawConfig);
 typedef C2D_STATUS (*Z2DFlush)(C2D_CONTEXT a_c2dContext);
 typedef C2D_STATUS (*Z2DFinish)(C2D_CONTEXT a_c2dContext);
 typedef C2D_STATUS (*Z2DSetStretchMode)(C2D_CONTEXT a_c2dContext, C2D_STRETCH_MODE a_mode);
 typedef C2D_STATUS (*Z2DSetBlendMode)(C2D_CONTEXT a_c2dContext, C2D_ALPHA_BLEND_MODE a_mode);
 typedef C2D_STATUS (*Z2DSetDither)(C2D_CONTEXT a_c2dContext, int a_bEnable);
+typedef C2D_STATUS (*Z2DSetFgColor)(C2D_CONTEXT a_c2dContext, unsigned int a_fgColor);
 
 static Z2DCreateContext		z2dCreateContext;
 static Z2DDestroyContext	z2dDestroyContext;
@@ -96,11 +98,13 @@ static Z2DSetSrcRectangle	z2dSetSrcRectangle;
 static Z2DSetDstRectangle	z2dSetDstRectangle;
 static Z2DSetDstClipRect	z2dSetDstClipRect;
 static Z2DDrawBlit			z2dDrawBlit;
+static Z2DDrawRect			z2dDrawRect;
 static Z2DFlush				z2dFlush;
 static Z2DFinish			z2dFinish;
 static Z2DSetStretchMode	z2dSetStretchMode;
 static Z2DSetBlendMode		z2dSetBlendMode;
 static Z2DSetDither			z2dSetDither;
+static Z2DSetFgColor		z2dSetFgColor;
 
 /* Adaptor encodings. */
 static XF86VideoEncodingRec imxVideoEncoding[] =
@@ -1115,11 +1119,13 @@ IMXXVInitAdaptorC2D(
 	z2dSetSrcRectangle	= (Z2DSetSrcRectangle)	dlsym(library, "c2dSetSrcRectangle");
 	z2dSetDstClipRect	= (Z2DSetDstClipRect)	dlsym(library, "c2dSetDstClipRect");
 	z2dDrawBlit			= (Z2DDrawBlit)			dlsym(library, "c2dDrawBlit");
+	z2dDrawRect			= (Z2DDrawRect)			dlsym(library, "c2dDrawRect");
 	z2dFlush			= (Z2DFlush)			dlsym(library, "c2dFlush");
 	z2dFinish			= (Z2DFinish)			dlsym(library, "c2dFinish");
 	z2dSetStretchMode	= (Z2DSetStretchMode)	dlsym(library, "c2dSetStretchMode");
 	z2dSetBlendMode		= (Z2DSetBlendMode)		dlsym(library, "c2dSetBlendMode");
 	z2dSetDither		= (Z2DSetDither)		dlsym(library, "c2dSetDither");
+	z2dSetFgColor		= (Z2DSetFgColor)		dlsym(library, "c2dSetFgColor");
 
 	const char* err = dlerror();
 
@@ -1248,8 +1254,7 @@ IMXXVInitAdaptorC2D(
 		if (C2D_STATUS_OK != r) {
 
 			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-				"IMXXVInitAdaptor failed to allocate surface for screen (code: 0x%08x)\n",
-				r);
+				"IMXXVInitAdaptor failed to allocate surface for screen (code: 0x%08x)\n", r);
 
 			z2dDestroyContext(imxPtr->xvGpuContext);
 			imxPtr->xvGpuContext = NULL;
@@ -1257,6 +1262,16 @@ IMXXVInitAdaptorC2D(
 			dlclose(library);
 			return 0;
 		}
+
+		/* Wipe out new surface to black. */
+		z2dSetDstSurface(imxPtr->xvGpuContext, imxPtr->xvScreenSurf2);
+		z2dSetSrcSurface(imxPtr->xvGpuContext, NULL);
+		z2dSetBrushSurface(imxPtr->xvGpuContext, NULL, NULL);
+		z2dSetMaskSurface(imxPtr->xvGpuContext, NULL, NULL);
+		z2dSetBlendMode(imxPtr->xvGpuContext, C2D_ALPHA_BLEND_NONE);
+		z2dSetFgColor(imxPtr->xvGpuContext, 0U);
+
+		z2dDrawRect(imxPtr->xvGpuContext, C2D_PARAM_FILL_BIT);
 
 #endif /* IMXXV_DBLFB_ENABLE */
 

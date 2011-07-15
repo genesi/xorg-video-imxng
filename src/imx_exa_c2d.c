@@ -2910,7 +2910,14 @@ IMX_EXA_ScreenInit(int scrnIndex, ScreenPtr pScreen)
 	}
 
 	/* Connect to the GPU if accelerated backend in use. */
-	imxexa_gpu_context_acquire(pScrn);
+	if (!imxexa_gpu_context_acquire(pScrn))
+		imxPtr->backend = IMXEXA_BACKEND_NONE;
+
+	xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+		"Using %s backend\n",
+		(imxPtr->backend == IMXEXA_BACKEND_Z160 ? "Z160" :
+		(imxPtr->backend == IMXEXA_BACKEND_Z430 ? "Z430" :
+		"software fallback")) );
 
 	return TRUE;
 }

@@ -17,7 +17,7 @@ static inline void i420_to_yuy2_c(
     int i;
 
     for (i = 0; i < height; ++i) {
-        uint32_t *pack_dst = dst;
+        uint32_t *pack_dst = (uint32_t *) dst;
         const uint8_t *two_ysrc = ysrc;
         const uint8_t *one_usrc = usrc;
         const uint8_t *one_vsrc = vsrc;

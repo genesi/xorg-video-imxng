@@ -85,16 +85,8 @@ typedef struct {
 	unsigned char*					fbmem;
 	int								fboff;
 	int								lineLength;
-	int								rotate;
-	Bool							shadowFB;
-	void*							shadow;
 	CloseScreenProcPtr				CloseScreen;
-	CreateScreenResourcesProcPtr	CreateScreenResources;
-	void							(*PointerMoved)(int index, int x, int y);
 	EntityInfoPtr					pEnt;
-	/* DGA info */
-	DGAModePtr						pDGAMode;
-	int								nDGAMode;
 	OptionInfoPtr					options;
 
 	DevUnion						xvPortPrivate[IMXXV_NUM_PORTS];
