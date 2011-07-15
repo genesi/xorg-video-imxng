@@ -47,6 +47,7 @@
 #include <string.h>
 
 #include "imx_type.h"
+#include "imx_colorspace.h"
 
 #ifndef FOURCC_YVYU
 #define FOURCC_YVYU 0x55595659 /* 'YVYU' in little-endian */
@@ -671,6 +672,8 @@ IMXXVPutImage(
 
 		if (FOURCC_YV12 == image) {
 
+                    i420_to_yuy2_c(dst, ysrc, vsrc, usrc, align_src_w, align_src_h, dst_stride, lum_stride, chr_stride);
+
 #if 0
 			const uint8_t *tmp = usrc;
 			usrc = vsrc;
@@ -687,7 +690,7 @@ IMXXVPutImage(
 				lum_stride,
 				chr_stride,
 				1);
-#else
+//#else
 			const uint8_t *yuv[3] = { ysrc, vsrc, usrc };
 			const unsigned extra_align_src_w = align_src_w & ~0xf;
 
@@ -699,8 +702,9 @@ IMXXVPutImage(
 				extra_align_src_w,
 				align_src_h);
 #endif
-		}
-		else {
+		} else {
+                    i420_to_yuy2_c(dst, ysrc, usrc, vsrc, align_src_w, align_src_h, dst_stride, lum_stride, chr_stride);
+#if 0
 			const uint8_t *yuv[3] = { ysrc, usrc, vsrc };
 			const unsigned extra_align_src_w = align_src_w & ~0xf;
 
@@ -711,6 +715,7 @@ IMXXVPutImage(
 				lum_stride - extra_align_src_w,
 				extra_align_src_w,
 				align_src_h);
+#endif
 		}
 	}
 	else {
