@@ -1141,16 +1141,40 @@ IMXXVInitAdaptorC2D(
 
 	IMXPtr imxPtr = IMXPTR(pScrn);
 
+	const int fd = fbdevHWGetFD(pScrn);
+
+	struct fb_fix_screeninfo fixinfo;
+	struct fb_var_screeninfo varinfo;
+
+	ioctl(fd, FBIOGET_FSCREENINFO, &fixinfo);
+	ioctl(fd, FBIOGET_VSCREENINFO, &varinfo);
+
+	C2D_SURFACE_DEF surfDef;
+	memset(&surfDef, 0, sizeof(surfDef));
+
+	C2D_STATUS r;
+
 	if (IMXEXA_BACKEND_Z160 == imxPtr->backend) {
 
 		IMXEXAPtr fPtr = IMXEXAPTR(imxPtr);
 
 		imxPtr->xvGpuContext = fPtr->gpuContext;
 		imxPtr->xvScreenSurf = fPtr->screenSurf;
+
+#if IMXXV_DBLFB_ENABLE
+
+		surfDef.format = fPtr->screenSurfDef.format;
+		surfDef.width  = varinfo.xres;
+		surfDef.height = varinfo.yres;
+		surfDef.stride = fixinfo.line_length;
+		surfDef.buffer = (uint8_t *) fixinfo.smem_start + varinfo.yres * fixinfo.line_length;
+		surfDef.host   = NULL; /* We don't intend to ever lock this surface. */
+		surfDef.flags  = C2D_SURFACE_NO_BUFFER_ALLOC;
+
+#endif /* IMXXV_DBLFB_ENABLE */
+
 	}
 	else {
-
-		C2D_STATUS r;
 
 		r = z2dCreateContext(&imxPtr->xvGpuContext);
 
@@ -1196,17 +1220,6 @@ IMXXVInitAdaptorC2D(
 			return 0;
 		}
 
-		const int fd = fbdevHWGetFD(pScrn);
-
-		struct fb_fix_screeninfo fixinfo;
-		struct fb_var_screeninfo varinfo;
-
-		ioctl(fd, FBIOGET_FSCREENINFO, &fixinfo);
-		ioctl(fd, FBIOGET_VSCREENINFO, &varinfo);
-
-		C2D_SURFACE_DEF surfDef;
-		memset(&surfDef, 0, sizeof(surfDef));
-
 		surfDef.format = fmt;
 		surfDef.width  = varinfo.xres;
 		surfDef.height = varinfo.yres;
@@ -1220,8 +1233,7 @@ IMXXVInitAdaptorC2D(
 		if (C2D_STATUS_OK != r) {
 
 			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-				"IMXXVInitAdaptor failed to allocate surface for screen (code: 0x%08x)\n",
-				r);
+				"IMXXVInitAdaptor failed to allocate surface for screen (code: 0x%08x)\n", r);
 
 			z2dDestroyContext(imxPtr->xvGpuContext);
 			imxPtr->xvGpuContext = NULL;
@@ -1232,15 +1244,6 @@ IMXXVInitAdaptorC2D(
 
 #if IMXXV_DBLFB_ENABLE
 
-		varinfo.yres_virtual = varinfo.yres * 2;
-		varinfo.yoffset = 0;
-
-		if (-1 == ioctl(fd, FBIOPUT_VSCREENINFO, &varinfo)) {
-			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-				"IMXXVInitAdaptor failed at put_vscreeninfo ioctl (errno: %s)\n",
-				strerror(errno));
-		}
-
 		surfDef.format = fmt;
 		surfDef.width  = varinfo.xres;
 		surfDef.height = varinfo.yres;
@@ -1249,33 +1252,46 @@ IMXXVInitAdaptorC2D(
 		surfDef.host   = NULL; /* We don't intend to ever lock this surface. */
 		surfDef.flags  = C2D_SURFACE_NO_BUFFER_ALLOC;
 
-		r = z2dSurfAlloc(imxPtr->xvGpuContext, &imxPtr->xvScreenSurf2, &surfDef);
-
-		if (C2D_STATUS_OK != r) {
-
-			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-				"IMXXVInitAdaptor failed to allocate surface for screen (code: 0x%08x)\n", r);
-
-			z2dDestroyContext(imxPtr->xvGpuContext);
-			imxPtr->xvGpuContext = NULL;
-
-			dlclose(library);
-			return 0;
-		}
-
-		/* Wipe out new surface to black. */
-		z2dSetDstSurface(imxPtr->xvGpuContext, imxPtr->xvScreenSurf2);
-		z2dSetSrcSurface(imxPtr->xvGpuContext, NULL);
-		z2dSetBrushSurface(imxPtr->xvGpuContext, NULL, NULL);
-		z2dSetMaskSurface(imxPtr->xvGpuContext, NULL, NULL);
-		z2dSetBlendMode(imxPtr->xvGpuContext, C2D_ALPHA_BLEND_NONE);
-		z2dSetFgColor(imxPtr->xvGpuContext, 0U);
-
-		z2dDrawRect(imxPtr->xvGpuContext, C2D_PARAM_FILL_BIT);
-
 #endif /* IMXXV_DBLFB_ENABLE */
 
 	}
+
+#if IMXXV_DBLFB_ENABLE
+
+	varinfo.yres_virtual = varinfo.yres * 2;
+	varinfo.yoffset = 0;
+
+	if (-1 == ioctl(fd, FBIOPUT_VSCREENINFO, &varinfo)) {
+		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+			"IMXXVInitAdaptor failed at put_vscreeninfo ioctl (errno: %s)\n",
+			strerror(errno));
+	}
+
+	r = z2dSurfAlloc(imxPtr->xvGpuContext, &imxPtr->xvScreenSurf2, &surfDef);
+
+	if (C2D_STATUS_OK != r) {
+
+		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+			"IMXXVInitAdaptor failed to allocate surface for screen (code: 0x%08x)\n", r);
+
+		z2dDestroyContext(imxPtr->xvGpuContext);
+		imxPtr->xvGpuContext = NULL;
+
+		dlclose(library);
+		return 0;
+	}
+
+	/* Wipe out new surface to black. */
+	z2dSetDstSurface(imxPtr->xvGpuContext, imxPtr->xvScreenSurf2);
+	z2dSetSrcSurface(imxPtr->xvGpuContext, NULL);
+	z2dSetBrushSurface(imxPtr->xvGpuContext, NULL, NULL);
+	z2dSetMaskSurface(imxPtr->xvGpuContext, NULL, NULL);
+	z2dSetBlendMode(imxPtr->xvGpuContext, C2D_ALPHA_BLEND_NONE);
+	z2dSetFgColor(imxPtr->xvGpuContext, 0U);
+
+	z2dDrawRect(imxPtr->xvGpuContext, C2D_PARAM_FILL_BIT);
+
+#endif /* IMXXV_DBLFB_ENABLE */
 
 	/* This early during driver init ScrnInfoPtr does not have a valid ScreenPtr yet. */
 	ScreenPtr pScreen = screenInfo.screens[pScrn->scrnIndex];
