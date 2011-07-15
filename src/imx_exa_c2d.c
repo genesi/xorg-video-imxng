@@ -27,6 +27,9 @@
 #include <fbdevhw.h>
 #include <exa.h>
 
+#include <sys/ioctl.h>
+#include <linux/fb.h>
+
 /* Preparation for the inclusion of c2d_api.h */
 #ifndef _LINUX
 #define _LINUX
@@ -44,9 +47,10 @@
 #error This driver can be built only against EXA version 2.5.0 or higher.
 #endif
 
-/* Minimal width or height of pixel surfaces for accelerating operations.*/
-#define	IMX_EXA_MIN_SURF_DIM				32
-/* Maximal dimension of pixel surfaces for accelerating operations on any gpu backend. */
+/* Minimal width and height of pixel surfaces for accelerating operations. */
+#define IMX_EXA_MIN_SURF_WIDTH				32
+#define	IMX_EXA_MIN_SURF_HEIGHT				32 /* WARNING: Z160 backend has stability issues with surface heights less than 32. */
+/* Maximal dimension of pixel surfaces for accelerating operations. */
 #define IMX_EXA_MAX_SURF_DIM 				2048
 
 /* This flag must be enabled to perform any debug logging */
@@ -596,15 +600,6 @@ imxexa_can_accelerate_pixmap(
 	if (NULL == fPixmapPtr->surf && PIXMAP_STAMP_EVICTED != fPixmapPtr->stamp)
 		return FALSE;
 
-#if 0
-	/* pixmaps of ridiculously small size are not efficient to use the GPU on */
-	if (fPixmapPtr->width <= IMX_EXA_MIN_SURF_DIM)
-		return FALSE;
-
-	if (fPixmapPtr->height <= IMX_EXA_MIN_SURF_DIM)
-		return FALSE;
-#endif
-
 	return TRUE;
 }
 
@@ -708,30 +703,22 @@ imxexa_gpu_context_acquire(
 	}
 
 	/* Allocate first surface for the screen. */
-/*	fb_fix_screeninfo fixinfo;
-	fb_var_screeninfo varinfo;
-	memset(&fixinfo, 0, sizeof(fixinfo));
-	memset(&varinfo, 0, sizeof(varinfo));
+	const int fd = fbdevHWGetFD(pScrn);
 
-	int fb_handler = open("/dev/fb0", O_RDWR);
-	assert(fb_handler);
+	struct fb_fix_screeninfo fixinfo;
+	struct fb_var_screeninfo varinfo;
 
-	ioctl(fb_handler, FBIOGET_FSCREENINFO, &fixinfo);
-	ioctl(fb_handler, FBIOGET_VSCREENINFO, &varinfo);
+	ioctl(fd, FBIOGET_FSCREENINFO, &fixinfo);
+	ioctl(fd, FBIOGET_VSCREENINFO, &varinfo);
 
-	void* bits = mmap(0, fixinfo.smem_len, PROT_WRITE, MAP_SHARED, fb_handler, 0);
-
-	close(fb_handler);
-	fb_handler = 0;
-*/
 	/* xfree86/fbdevhw should die in a fire. We use it here for conformity. */
 	/* At the early stages of driver init our ScrnInfoPtr does not have a valid ScreenPtr. */
 	fPtr->screenSurfDef.format = fmt;
-	fPtr->screenSurfDef.width  = pScrn->virtualX;								/* varinfo.xres; */
-	fPtr->screenSurfDef.height = pScrn->virtualY;								/* varinfo.yres; */
-	fPtr->screenSurfDef.stride = fbdevHWGetLineLength(pScrn);					/* fixinfo.line_length; */
-	fPtr->screenSurfDef.buffer = (char*) pScrn->memPhysBase + pScrn->fbOffset;	/* fixinfo.smem_start; */
-	fPtr->screenSurfDef.host   = fbdevHWMapVidmem(pScrn);						/* bits; */
+	fPtr->screenSurfDef.width  = varinfo.xres;
+	fPtr->screenSurfDef.height = varinfo.yres;
+	fPtr->screenSurfDef.stride = fixinfo.line_length;
+	fPtr->screenSurfDef.buffer = (void *) fixinfo.smem_start;
+	fPtr->screenSurfDef.host   = fbdevHWMapVidmem(pScrn);
 	fPtr->screenSurfDef.flags  = C2D_SURFACE_NO_BUFFER_ALLOC;
 
 	r = c2dSurfAlloc(fPtr->gpuContext, &fPtr->screenSurf, &fPtr->screenSurfDef);
@@ -1210,8 +1197,8 @@ IMXEXACreatePixmap2(
 		return fPixmapPtr;
 
 	/* Attempt to allocate from offscreen if surface geometry and bitsPerPixel are eligible. */
-	if ( (IMX_EXA_MAX_SURF_DIM >= width) && (IMX_EXA_MAX_SURF_DIM >= height) &&
-		(width >= IMX_EXA_MIN_SURF_DIM) && (height >= IMX_EXA_MIN_SURF_DIM) &&
+	if (IMX_EXA_MAX_SURF_DIM >= width && IMX_EXA_MAX_SURF_DIM >= height &&
+		IMX_EXA_MIN_SURF_WIDTH <= width && IMX_EXA_MIN_SURF_HEIGHT <= height &&
 		imxexa_surf_format_from_bpp(imxPtr->backend, bitsPerPixel, &fPixmapPtr->surfDef.format)) {
 
 		fPixmapPtr->surfDef.width = width;

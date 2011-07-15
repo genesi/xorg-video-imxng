@@ -34,22 +34,17 @@
 #include <dlfcn.h>
 #include <fbdevhw.h>
 
-/* Physical buffers handling */
+#include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/mman.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <sys/mman.h>
 
-#if IMXXV_VSYNC_ENABLE
-#include <xorg/fbdevhw.h>
-#include <sys/ioctl.h>
+#include <linux/fb.h>
 #include <linux/mxcfb.h>
 #include <errno.h>
-#if IMXXV_VSYNC_DEBUG
 #include <string.h>
-#endif /* IMXXV_VSYNC_DEBUG */
-#endif /* IMXXV_VSYNC_ENABLE */
 
 #include "imx_type.h"
 
@@ -81,6 +76,7 @@ typedef C2D_STATUS (*Z2DSetDstRectangle)(C2D_CONTEXT a_c2dContext, C2D_RECT *a_r
 typedef C2D_STATUS (*Z2DSetDstClipRect)(C2D_CONTEXT a_c2dContext, C2D_RECT *a_clipRect);
 typedef C2D_STATUS (*Z2DDrawBlit)(C2D_CONTEXT a_c2dContext);
 typedef C2D_STATUS (*Z2DFlush)(C2D_CONTEXT a_c2dContext);
+typedef C2D_STATUS (*Z2DFinish)(C2D_CONTEXT a_c2dContext);
 typedef C2D_STATUS (*Z2DSetStretchMode)(C2D_CONTEXT a_c2dContext, C2D_STRETCH_MODE a_mode);
 typedef C2D_STATUS (*Z2DSetBlendMode)(C2D_CONTEXT a_c2dContext, C2D_ALPHA_BLEND_MODE a_mode);
 typedef C2D_STATUS (*Z2DSetDither)(C2D_CONTEXT a_c2dContext, int a_bEnable);
@@ -100,6 +96,7 @@ static Z2DSetDstRectangle	z2dSetDstRectangle;
 static Z2DSetDstClipRect	z2dSetDstClipRect;
 static Z2DDrawBlit			z2dDrawBlit;
 static Z2DFlush				z2dFlush;
+static Z2DFinish			z2dFinish;
 static Z2DSetStretchMode	z2dSetStretchMode;
 static Z2DSetBlendMode		z2dSetBlendMode;
 static Z2DSetDither			z2dSetDither;
@@ -244,14 +241,6 @@ imxxv_wait_for_vsync(
 {
 	const int fd = fbdevHWGetFD(pScrn);
 
-	if (0 > fd) {
-
-		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			"IMXXVPutImage encountered invalid fd for screen %s\n",
-			fbdevHWGetName(pScrn));
-		return;
-	}
-
 	int res, count = 0;
 
 	/* Waiting for vsync is an interruptable syscall, we need to persist. */
@@ -265,7 +254,7 @@ imxxv_wait_for_vsync(
 	if (-1 == res)
 	{
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			"IMXXVPutImage failed to perform vsync ioctl (errno: %s, num tries: %d)\n",
+			"IMXXVPutImage failed at wait_for_vsync ioctl (errno: %s, num tries: %d)\n",
 			strerror(errno), count);
 	}
 
@@ -378,6 +367,32 @@ IMXXVStopVideo(
 		if (NULL != imxPtr->xvSurf[port_idx]) {
 
 			imxxv_delete_port_surface(imxPtr, port_idx);
+
+#if IMXXV_DBLFB_ENABLE
+
+			/* Bring xorg's frame buffer to front. */
+			const int fd = fbdevHWGetFD(pScrn);
+
+			struct fb_var_screeninfo varinfo;
+
+			if (-1 == ioctl(fd, FBIOGET_VSCREENINFO, &varinfo)) {
+				xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+					"IMXXVStopVideo failed at get_vscreeninfo ioctl (errno: %s)\n",
+					strerror(errno));
+			}
+
+			varinfo.yoffset = 0;
+
+			if (-1 == ioctl(fd, FBIOPAN_DISPLAY, &varinfo)) {
+				xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+					"IMXXVStopVideo failed at pan_display ioctl (errno: %s)\n",
+					strerror(errno));
+			}
+
+			imxPtr->xvBufferTracker = 0;
+
+#endif /* IMXXV_DBLFB_ENABLE */
+
 		}
 
 		/*	TODO: physical buffer records need to be per port, to avoid the mmap stress
@@ -720,7 +735,6 @@ IMXXVPutImage(
 	z2dSurfUnlock(imxPtr->xvGpuContext, imxPtr->xvSurf[port_idx]);
 
 	/* Set various static draw parameters. */
-	z2dSetDstSurface(imxPtr->xvGpuContext, imxPtr->xvScreenSurf);
 	z2dSetBrushSurface(imxPtr->xvGpuContext, NULL, NULL);
 	z2dSetMaskSurface(imxPtr->xvGpuContext, NULL, NULL);
 
@@ -728,9 +742,8 @@ IMXXVPutImage(
 
 	const Bool dither_blit = 16 == pScrn->bitsPerPixel;
 
-	if (dither_blit) {
+	if (dither_blit)
 		z2dSetDither(imxPtr->xvGpuContext, 1);
-	}
 
 	const Bool stretch_blit = imxPtr->use_bilinear_filtering ?
 		(src_w != drw_w || src_h != drw_h) : FALSE;
@@ -756,6 +769,11 @@ IMXXVPutImage(
 	C2D_RECT rectDstAux;
 	C2D_RECT rectSrcAux;
 	Bool split_blit = FALSE;
+	Bool full_screen = 
+		0 == pDraw->x &&
+		0 == pDraw->y &&
+		pDraw->pScreen->width == pDraw->width &&
+		pDraw->pScreen->height == pDraw->height;
 
 	const int src_end_x = src_x + src_w;
 
@@ -804,8 +822,21 @@ IMXXVPutImage(
 		}
 
 		split_blit = TRUE;
+
+#if IMXXV_DBLFB_ENABLE
+
+		imxPtr->xvBufferTracker ^= 1;
+
+		if (full_screen && imxPtr->xvBufferTracker)
+			z2dSetDstSurface(imxPtr->xvGpuContext, imxPtr->xvScreenSurf2);
+		else
+			z2dSetDstSurface(imxPtr->xvGpuContext, imxPtr->xvScreenSurf);
+
+#endif /* IMXXV_DBLFB_ENABLE */
+
 	}
 	else {
+		z2dSetDstSurface(imxPtr->xvGpuContext, imxPtr->xvScreenSurf);
 		z2dSetSrcSurface(imxPtr->xvGpuContext, imxPtr->xvSurf[port_idx]);
 
 		z2dSetSrcRectangle(imxPtr->xvGpuContext, &rectSrc);
@@ -875,9 +906,8 @@ IMXXVPutImage(
 	/* Reset clipping and various static draw parameters. */
 	z2dSetDstClipRect(imxPtr->xvGpuContext, NULL);
 
-	if (dither_blit) {
+	if (dither_blit)
 		z2dSetDither(imxPtr->xvGpuContext, 0);
-	}
 
 	if (stretch_blit) {
 		z2dSetStretchMode(imxPtr->xvGpuContext, C2D_STRETCH_POINT_SAMPLING);
@@ -895,7 +925,39 @@ IMXXVPutImage(
 		/* This is a synchronous movie sequence, show the individual frames on screen ASAP. */
 		/* Note: Next GPU flush effectively doubles the CPU load at presenting a frame, but the */
 		/* frame reaches the screen sooner, as long as the required CPU resource is available. */
+
+#if IMXXV_DBLFB_ENABLE
+
+		if (full_screen && split_blit) {
+
+			z2dFinish(imxPtr->xvGpuContext);
+
+			const int fd = fbdevHWGetFD(pScrn);
+
+			struct fb_var_screeninfo varinfo;
+
+			if (-1 == ioctl(fd, FBIOGET_VSCREENINFO, &varinfo)) {
+				xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+					"IMXXVPutImage failed at get_vscreeninfo ioctl (errno: %s)\n",
+					strerror(errno));
+			}
+
+			varinfo.yoffset = varinfo.yres * imxPtr->xvBufferTracker;
+
+			if (-1 == ioctl(fd, FBIOPAN_DISPLAY, &varinfo)) {
+				xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+					"IMXXVPutImage failed at pan_display ioctl (errno: %s)\n",
+					strerror(errno));
+			}
+		}
+		else
+			z2dFlush(imxPtr->xvGpuContext);
+#else
+
 		z2dFlush(imxPtr->xvGpuContext);
+
+#endif /* IMXXV_DBLFB_ENABLE */
+
 	}
 
 	return Success;
@@ -1049,6 +1111,7 @@ IMXXVInitAdaptorC2D(
 	z2dSetDstClipRect	= (Z2DSetDstClipRect)	dlsym(library, "c2dSetDstClipRect");
 	z2dDrawBlit			= (Z2DDrawBlit)			dlsym(library, "c2dDrawBlit");
 	z2dFlush			= (Z2DFlush)			dlsym(library, "c2dFlush");
+	z2dFinish			= (Z2DFinish)			dlsym(library, "c2dFinish");
 	z2dSetStretchMode	= (Z2DSetStretchMode)	dlsym(library, "c2dSetStretchMode");
 	z2dSetBlendMode		= (Z2DSetBlendMode)		dlsym(library, "c2dSetBlendMode");
 	z2dSetDither		= (Z2DSetDither)		dlsym(library, "c2dSetDither");
@@ -1122,15 +1185,23 @@ IMXXVInitAdaptorC2D(
 			return 0;
 		}
 
+		const int fd = fbdevHWGetFD(pScrn);
+
+		struct fb_fix_screeninfo fixinfo;
+		struct fb_var_screeninfo varinfo;
+
+		ioctl(fd, FBIOGET_FSCREENINFO, &fixinfo);
+		ioctl(fd, FBIOGET_VSCREENINFO, &varinfo);
+
 		C2D_SURFACE_DEF surfDef;
 		memset(&surfDef, 0, sizeof(surfDef));
 
 		surfDef.format = fmt;
-		surfDef.width  = pScrn->virtualX;								/* varinfo.xres; */
-		surfDef.height = pScrn->virtualY;								/* varinfo.yres; */
-		surfDef.stride = fbdevHWGetLineLength(pScrn);					/* fixinfo.line_length; */
-		surfDef.buffer = (char*) pScrn->memPhysBase + pScrn->fbOffset;	/* fixinfo.smem_start; */
-		surfDef.host   = fbdevHWMapVidmem(pScrn);						/* bits; */
+		surfDef.width  = varinfo.xres;
+		surfDef.height = varinfo.yres;
+		surfDef.stride = fixinfo.line_length;
+		surfDef.buffer = (void *) fixinfo.smem_start;
+		surfDef.host   = NULL; /* We don't intend to ever lock this surface. */
 		surfDef.flags  = C2D_SURFACE_NO_BUFFER_ALLOC;
 
 		r = z2dSurfAlloc(imxPtr->xvGpuContext, &imxPtr->xvScreenSurf, &surfDef);
@@ -1147,6 +1218,43 @@ IMXXVInitAdaptorC2D(
 			dlclose(library);
 			return 0;
 		}
+
+#if IMXXV_DBLFB_ENABLE
+
+		varinfo.yres_virtual = varinfo.yres * 2;
+		varinfo.yoffset = 0;
+
+		if (-1 == ioctl(fd, FBIOPUT_VSCREENINFO, &varinfo)) {
+			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+				"IMXXVInitAdaptor failed at put_vscreeninfo ioctl (errno: %s)\n",
+				strerror(errno));
+		}
+
+		surfDef.format = fmt;
+		surfDef.width  = varinfo.xres;
+		surfDef.height = varinfo.yres;
+		surfDef.stride = fixinfo.line_length;
+		surfDef.buffer = (uint8_t *) fixinfo.smem_start + varinfo.yres * fixinfo.line_length;
+		surfDef.host   = NULL; /* We don't intend to ever lock this surface. */
+		surfDef.flags  = C2D_SURFACE_NO_BUFFER_ALLOC;
+
+		r = z2dSurfAlloc(imxPtr->xvGpuContext, &imxPtr->xvScreenSurf2, &surfDef);
+
+		if (C2D_STATUS_OK != r) {
+
+			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+				"IMXXVInitAdaptor failed to allocate surface for screen (code: 0x%08x)\n",
+				r);
+
+			z2dDestroyContext(imxPtr->xvGpuContext);
+			imxPtr->xvGpuContext = NULL;
+
+			dlclose(library);
+			return 0;
+		}
+
+#endif /* IMXXV_DBLFB_ENABLE */
+
 	}
 
 	/* This early during driver init ScrnInfoPtr does not have a valid ScreenPtr yet. */

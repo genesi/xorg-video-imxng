@@ -431,13 +431,12 @@ IMXPreInit(ScrnInfoPtr pScrn, int flags)
 
 			fPtr->backend = IMXEXA_BACKEND_NONE;
 		}
-		else {
-			xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-				"Using %s backend\n",
-				((fPtr->backend == IMXEXA_BACKEND_Z160) ? "Z160" :
-				((fPtr->backend == IMXEXA_BACKEND_Z430) ? "Z430" :
-				"software fallback")) );
-		}
+
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+			"Using %s backend\n",
+			((fPtr->backend == IMXEXA_BACKEND_Z160) ? "Z160" :
+			((fPtr->backend == IMXEXA_BACKEND_Z430) ? "Z430" :
+			"software fallback")) );
 	}
 
 	/* ShadowFB option */
@@ -607,7 +606,7 @@ IMXCreateScreenResources(ScreenPtr pScreen)
     pScreen->CreateScreenResources = IMXCreateScreenResources;
 
     if (!ret)
-	return FALSE;
+		return FALSE;
 
     pPixmap = pScreen->GetScreenPixmap(pScreen);
 
@@ -627,7 +626,7 @@ IMXShadowInit(ScreenPtr pScreen)
     IMXPtr fPtr = IMXPTR(pScrn);
 
     if (!shadowSetup(pScreen)) {
-	return FALSE;
+		return FALSE;
     }
 
     fPtr->CreateScreenResources = pScreen->CreateScreenResources;
