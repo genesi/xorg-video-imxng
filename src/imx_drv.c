@@ -135,7 +135,6 @@ static SymTabRec IMXChipsets[] = {
 #define OPTION_STR_BACKEND		"Backend"
 #define OPTION_STR_COMPOSITING	"Compositing"
 #define OPTION_STR_XV_BILINEAR	"XvBilinear"
-#define OPTION_STR_SHADOW_FB	"ShadowFB"
 #define OPTION_STR_DEBUG		"Debug"
 
 static const OptionInfoRec IMXOptions[] = {
@@ -145,7 +144,6 @@ static const OptionInfoRec IMXOptions[] = {
 	{ OPTION_BACKEND,		OPTION_STR_BACKEND,		OPTV_STRING,	{0},	FALSE },
 	{ OPTION_COMPOSITING,	OPTION_STR_COMPOSITING,	OPTV_BOOLEAN,	{0},	FALSE },
 	{ OPTION_XV_BILINEAR,	OPTION_STR_XV_BILINEAR,	OPTV_BOOLEAN,	{0},	FALSE },
-	{ OPTION_SHADOW_FB,		OPTION_STR_SHADOW_FB,	OPTV_BOOLEAN,	{0},	FALSE },
 	{ OPTION_DEBUG,			OPTION_STR_DEBUG,		OPTV_BOOLEAN,	{0},	FALSE },
 	{ -1,					NULL,					OPTV_NONE,		{0},	FALSE }
 };

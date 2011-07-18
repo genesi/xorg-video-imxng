@@ -450,26 +450,16 @@ IMXXVQueryBestSize(
 }
 
 extern void
-yuv_planar_to_yuy2(
-	uint8_t *dst,
-	const uint8_t *ysrc,
-	const uint8_t *usrc,
-	const uint8_t *vsrc,
-	int width,
-	int height,
-	int dst_stride,
-	int lum_stride,
-	int chr_stride,
-	int is_chroma_every_other_line);
-
-extern void
-i420_yuyv_neon(
-	uint8_t *out,
-	const uint8_t **in,
-	unsigned int pitch_o,
-	unsigned int offs_i,
-	unsigned int width,
-	unsigned int height);
+yuv420_to_yuv422(
+	uint8_t *yuv,
+	const uint8_t *y,
+	const uint8_t *u,
+	const uint8_t *v,
+	int w,
+	int h,
+	int yw,
+	int cw,
+	int dw);
 
 static int
 IMXXVPutImage(
@@ -675,50 +665,35 @@ IMXXVPutImage(
 		const uint8_t *vsrc = buf + lum_stride * height + chr_stride * (height + align_src_y) / 2 + align_src_x / 2;
 
 		if (FOURCC_YV12 == image) {
-
-                    i420_to_yuy2_c(dst, ysrc, vsrc, usrc, align_src_w, align_src_h, dst_stride, lum_stride, chr_stride);
-
 #if 0
-			const uint8_t *tmp = usrc;
-			usrc = vsrc;
-			vsrc = tmp;
-
-			yuv_planar_to_yuy2(
+			i420_to_yuy2_c(dst, ysrc, vsrc, usrc, align_src_w, align_src_h, dst_stride, lum_stride, chr_stride);
+#else
+			yuv420_to_yuv422(
+				dst,
+				ysrc,
+				vsrc,
+				usrc,
+				align_src_w,
+				align_src_h,
+				width,
+				width / 2,
+				dst_stride);
+#endif
+		}
+		else {
+#if 0
+			i420_to_yuy2_c(dst, ysrc, usrc, vsrc, align_src_w, align_src_h, dst_stride, lum_stride, chr_stride);
+#else
+			yuv420_to_yuv422(
 				dst,
 				ysrc,
 				usrc,
 				vsrc,
 				align_src_w,
 				align_src_h,
-				dst_stride,
-				lum_stride,
-				chr_stride,
-				1);
-//#else
-			const uint8_t *yuv[3] = { ysrc, vsrc, usrc };
-			const unsigned extra_align_src_w = align_src_w & ~0xf;
-
-			i420_yuyv_neon(
-				dst,
-				yuv,
-				dst_stride,
-				lum_stride - extra_align_src_w,
-				extra_align_src_w,
-				align_src_h);
-#endif
-		} else {
-                    i420_to_yuy2_c(dst, ysrc, usrc, vsrc, align_src_w, align_src_h, dst_stride, lum_stride, chr_stride);
-#if 0
-			const uint8_t *yuv[3] = { ysrc, usrc, vsrc };
-			const unsigned extra_align_src_w = align_src_w & ~0xf;
-
-			i420_yuyv_neon(
-				dst,
-				yuv,
-				dst_stride,
-				lum_stride - extra_align_src_w,
-				extra_align_src_w,
-				align_src_h);
+				width,
+				width / 2,
+				dst_stride);
 #endif
 		}
 	}
@@ -840,6 +815,9 @@ IMXXVPutImage(
 			z2dSetDstSurface(imxPtr->xvGpuContext, imxPtr->xvScreenSurf2);
 		else
 			z2dSetDstSurface(imxPtr->xvGpuContext, imxPtr->xvScreenSurf);
+#else
+
+		z2dSetDstSurface(imxPtr->xvGpuContext, imxPtr->xvScreenSurf);
 
 #endif /* IMXXV_DBLFB_ENABLE */
 

@@ -39,3 +39,8 @@ imx_drv_la_SOURCES = \
 	imx_ext.h \
 	imx_xv_c2d.c \
 	imx_exa_c2d.c
+
+if NEON
+imx_drv_la_SOURCES += \
+	neon_pixconv.S
+endif
