@@ -48,9 +48,10 @@
 #endif
 
 /* Minimal width and height of pixel surfaces for accelerating operations. */
-#define IMX_EXA_MIN_SURF_WIDTH				32
-#define	IMX_EXA_MIN_SURF_HEIGHT				32 /* WARNING: Z160 backend has stability issues with surface heights less than 32. */
-/* Maximal dimension of pixel surfaces for accelerating operations. */
+#define IMX_EXA_MIN_SURF_WIDTH				8
+/* WARNING: Z160 backend MAY have stability issues with surface heights less than 32 (corrupted tooltips etc.). */
+#define	IMX_EXA_MIN_SURF_HEIGHT				32
+/* Maximal dimension of pixel surfaces for accelerating operations. Z160 may have a 1024-pixel limit here but we can repeat?*/
 #define IMX_EXA_MAX_SURF_DIM 				2048
 
 /* This flag must be enabled to perform any debug logging */
