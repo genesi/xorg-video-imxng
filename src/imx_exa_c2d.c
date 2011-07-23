@@ -29,6 +29,7 @@
 
 #include <sys/ioctl.h>
 #include <linux/fb.h>
+#include <errno.h>
 
 /* Preparation for the inclusion of c2d_api.h */
 #ifndef _LINUX
@@ -711,12 +712,31 @@ imxexa_gpu_context_acquire(
 	ioctl(fd, FBIOGET_FSCREENINFO, &fixinfo);
 	ioctl(fd, FBIOGET_VSCREENINFO, &varinfo);
 
-	/* xfree86/fbdevhw should die in a fire. We use it here for conformity. */
+	/* For Z430 backend make sure screen stride is multiple of 32 pixels. */
+	if (IMXEXA_BACKEND_Z430 == imxPtr->backend &&
+		varinfo.xres_virtual & 0x1f) {
+
+		varinfo.xres_virtual = (varinfo.xres_virtual + 0x1f) & ~0x1f;
+		varinfo.xoffset = 0;
+
+		if (-1 == ioctl(fd, FBIOPUT_VSCREENINFO, &varinfo)) {
+
+			c2dDestroyContext(fPtr->gpuContext);
+			fPtr->gpuContext = NULL;
+
+			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+				"Attempt to correct screen stride failed at put_vscreeninfo ioctl (errno: %s)\n",
+				strerror(errno));
+
+			return FALSE;
+		}
+	}
+
 	/* At the early stages of driver init our ScrnInfoPtr does not have a valid ScreenPtr. */
 	fPtr->screenSurfDef.format = fmt;
 	fPtr->screenSurfDef.width  = varinfo.xres;
 	fPtr->screenSurfDef.height = varinfo.yres;
-	fPtr->screenSurfDef.stride = fixinfo.line_length;
+	fPtr->screenSurfDef.stride = varinfo.xres_virtual * varinfo.bits_per_pixel / 8;
 	fPtr->screenSurfDef.buffer = (void *) fixinfo.smem_start;
 	fPtr->screenSurfDef.host   = fbdevHWMapVidmem(pScrn);
 	fPtr->screenSurfDef.flags  = C2D_SURFACE_NO_BUFFER_ALLOC;
@@ -725,12 +745,12 @@ imxexa_gpu_context_acquire(
 
 	if (C2D_STATUS_OK != r) {
 
-		/* Clean up and bail out. */
 		c2dDestroyContext(fPtr->gpuContext);
 		fPtr->gpuContext = NULL;
 
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 			"Unable to allocate surface for screen (code: 0x%08x)\n", r);
+
 		return FALSE;
 	}
 

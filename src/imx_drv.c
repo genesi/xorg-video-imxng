@@ -743,10 +743,11 @@ IMXScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
 
 	pScreen->SaveScreen = fbdevHWSaveScreenWeak();
 
-	/* Wrap the current CloseScreen function */
+	/* Wrap the current CloseScreen function. */
 	fPtr->CloseScreen = pScreen->CloseScreen;
 	pScreen->CloseScreen = IMXCloseScreen;
 
+	/* Init the Xv Adaptor. */
 	XF86VideoAdaptorPtr *ptr;
 	int n = xf86XVListGenericAdaptors(pScrn, &ptr);
 

@@ -375,7 +375,7 @@ IMXXVStopVideo(
 
 #if IMXXV_DBLFB_ENABLE
 
-			/* Bring xorg's frame buffer to front. */
+			/* Bring xorg's framebuffer to front. */
 			const int fd = fbdevHWGetFD(pScrn);
 
 			struct fb_var_screeninfo varinfo;
@@ -431,6 +431,22 @@ imxxv_seek_mapping(
 			return i;
 
 	return -1U;
+}
+
+static inline void
+imxxv_fill_surface(
+	const C2D_CONTEXT context,
+	const C2D_SURFACE surf,
+	const uint32_t color)
+{
+	z2dSetDstSurface(context, surf);
+	z2dSetSrcSurface(context, NULL);
+	z2dSetBrushSurface(context, NULL, NULL);
+	z2dSetMaskSurface(context, NULL, NULL);
+	z2dSetBlendMode(context, C2D_ALPHA_BLEND_NONE);
+	z2dSetFgColor(context, color);
+
+	z2dDrawRect(context, C2D_PARAM_FILL_BIT);
 }
 
 static void
@@ -500,22 +516,19 @@ IMXXVPutImage(
 	}
 
 	C2D_COLORFORMAT fmt;
-	int bytespp;
+	const int bytespp = 2;
 
 	switch (image) {
 	case FOURCC_YVYU:
 		fmt = C2D_COLOR_YVYU;
-		bytespp = 2;
 		break;
 	case FOURCC_UYVY:
 		fmt = C2D_COLOR_UYVY;
-		bytespp = 2;
 		break;
 	case FOURCC_YV12: /* Through a transform. */
 	case FOURCC_I420: /* Through a transform. */
 	case FOURCC_YUY2:
 		fmt = C2D_COLOR_YUY2;
-		bytespp = 2;
 		break;
 	default:
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
@@ -549,6 +562,9 @@ IMXXVPutImage(
 
 			return BadAlloc;
 		}
+
+		/* Wipe out the new surface to YUY2 black. */
+		imxxv_fill_surface(imxPtr->xvGpuContext, imxPtr->xvSurf[port_idx], 0x800000U);
 
 		if (width > IMXXV_MAX_BLIT_COORD) {
 
@@ -673,8 +689,8 @@ IMXXVPutImage(
 				ysrc,
 				vsrc,
 				usrc,
-				align_src_w,
-				align_src_h,
+				align_src_w & ~0xf,
+				align_src_h & ~0xf,
 				width,
 				width / 2,
 				dst_stride);
@@ -689,8 +705,8 @@ IMXXVPutImage(
 				ysrc,
 				usrc,
 				vsrc,
-				align_src_w,
-				align_src_h,
+				align_src_w & ~0xf,
+				align_src_h & ~0xf,
 				width,
 				width / 2,
 				dst_stride);
@@ -1259,15 +1275,8 @@ IMXXVInitAdaptorC2D(
 		return 0;
 	}
 
-	/* Wipe out new surface to black. */
-	z2dSetDstSurface(imxPtr->xvGpuContext, imxPtr->xvScreenSurf2);
-	z2dSetSrcSurface(imxPtr->xvGpuContext, NULL);
-	z2dSetBrushSurface(imxPtr->xvGpuContext, NULL, NULL);
-	z2dSetMaskSurface(imxPtr->xvGpuContext, NULL, NULL);
-	z2dSetBlendMode(imxPtr->xvGpuContext, C2D_ALPHA_BLEND_NONE);
-	z2dSetFgColor(imxPtr->xvGpuContext, 0U);
-
-	z2dDrawRect(imxPtr->xvGpuContext, C2D_PARAM_FILL_BIT);
+	/* Wipe out the new surface to RGB black. */
+	imxxv_fill_surface(imxPtr->xvGpuContext, imxPtr->xvScreenSurf2, 0U);
 
 #endif /* IMXXV_DBLFB_ENABLE */
 
