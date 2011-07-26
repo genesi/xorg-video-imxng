@@ -1252,13 +1252,16 @@ IMXXVInitAdaptorC2D(
 
 #if IMXXV_DBLFB_ENABLE
 
-	varinfo.yres_virtual = varinfo.yres * 2;
-	varinfo.yoffset = 0;
+	if (varinfo.yres_virtual < varinfo.yres * 2) {
 
-	if (-1 == ioctl(fd, FBIOPUT_VSCREENINFO, &varinfo)) {
-		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			"IMXXVInitAdaptor failed at put_vscreeninfo ioctl (errno: %s)\n",
-			strerror(errno));
+		varinfo.yres_virtual = varinfo.yres * 2;
+		varinfo.yoffset = 0;
+
+		if (-1 == ioctl(fd, FBIOPUT_VSCREENINFO, &varinfo)) {
+			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+				"IMXXVInitAdaptor failed at put_vscreeninfo ioctl (errno: %s)\n",
+				strerror(errno));
+		}
 	}
 
 	r = z2dSurfAlloc(imxPtr->xvGpuContext, &imxPtr->xvScreenSurf2, &surfDef);

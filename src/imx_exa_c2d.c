@@ -824,16 +824,39 @@ imxexa_update_surface_from_backup(
 	}
 }
 
-static inline void
+static Bool
 imxexa_update_backup_from_surface(
 	IMXEXAPtr fPtr,
 	IMXEXAPixmapPtr fPixmapPtr)
 {
 	if (NULL == fPixmapPtr)
-		return;
+		return FALSE;
 
 	if (NULL == fPixmapPtr->surf)
-		return;
+		return FALSE;
+
+	/* Has surface ever been evicted? */
+	if (NULL == fPixmapPtr->sysPtr) {
+
+		/* Compute number of pitch bytes for sysmem pixmaps of the specified geometry. */
+		const int sysPitchBytes =
+			imxexa_calc_system_memory_pitch(fPixmapPtr->width, fPixmapPtr->bitsPerPixel);
+
+		/* Allocate contiguous height * sysPitchBytes from heap. */
+		void* const sysPtr = malloc(fPixmapPtr->height * sysPitchBytes);
+
+		if (NULL != sysPtr) {
+
+			fPixmapPtr->sysPtr = sysPtr;
+			fPixmapPtr->sysPitchBytes = sysPitchBytes;
+		}
+		else {
+
+			xf86DrvMsg(0, X_ERROR,
+				"imxexa_update_backup_from_surface failed to allocate backing storage for GPU surface\n");
+			return FALSE;
+		}
+	}
 
 	char* ptr_dst = fPixmapPtr->sysPtr;
 	char* ptr_src = fPixmapPtr->surfPtr;
@@ -848,7 +871,7 @@ imxexa_update_backup_from_surface(
 
 			xf86DrvMsg(0, X_ERROR,
 				"imxexa_update_backup_from_surface failed to lock GPU surface (code: 0x%08x)\n", r);
-			return;
+			return FALSE;
 		}
 
 		fPixmapPtr->surfPtr = ptr_src;
@@ -866,6 +889,8 @@ imxexa_update_backup_from_surface(
 		ptr_dst += pitch_dst;
 		ptr_src += pitch_src;
 	}
+
+	return TRUE;
 }
 
 static Bool
@@ -962,7 +987,9 @@ imxexa_evict_pixmap(
 		return FALSE;
 	}
 
-	imxexa_update_backup_from_surface(fPtr, fPixmapPtr);
+	if (!imxexa_update_backup_from_surface(fPtr, fPixmapPtr))
+		return FALSE;
+
 	imxexa_unlock_surface(fPtr, fPixmapPtr);
 
 	/* Is pixmap using an alias? */
@@ -1180,45 +1207,9 @@ IMXEXACreatePixmap2(
 	if (0 >= width || 0 >= height || 0 >= bitsPerPixel)
 		return fPixmapPtr;
 
-	/* Allocate heap storage for sysmem pixmaps, also used for backup of offscreen pixmaps. */
-	/* Compute number of pitch bytes for sysmem pixmaps of the specified geometry. */
-	const int sysPitchBytes =
-		imxexa_calc_system_memory_pitch(width, bitsPerPixel);
-
-	/* Allocate contiguous height * sysPitchBytes from heap. */
-	void* const sysPtr = malloc(height * sysPitchBytes);
-
-	if (NULL != sysPtr) {
-
-		fPixmapPtr->sysPtr = sysPtr;
-		fPixmapPtr->sysPitchBytes = sysPitchBytes;
-
-		*pPitch = sysPitchBytes;
-
-#if IMX_EXA_DEBUG_PIXMAPS
-
-		xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-			"IMXEXACreatePixmap2 allocated system-memory pixmap of stride %d\n",
-			sysPitchBytes);
-#endif
-	}
-	else {
-
-		/* Unregister and free the driver private data associated with pixmap. */
-		imxexa_unregister_pixmap_from_driver(fPtr, fPixmapPtr);
-		free(fPixmapPtr);
-
-		xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
-			"IMXEXACreatePixmap2 failed to allocate system memory; no pixmap allocated\n");
-
-		return NULL;
-	}
-
-	if (NULL == fPtr->gpuContext)
-		return fPixmapPtr;
-
-	/* Attempt to allocate from offscreen if surface geometry and bitsPerPixel are eligible. */
-	if (IMX_EXA_MAX_SURF_DIM >= width && IMX_EXA_MAX_SURF_DIM >= height &&
+	/* Attempt to allocate from gpumem if surface geometry and bitsPerPixel are eligible. */
+	if (NULL != fPtr->gpuContext &&
+		IMX_EXA_MAX_SURF_DIM >= width && IMX_EXA_MAX_SURF_DIM >= height &&
 		IMX_EXA_MIN_SURF_WIDTH <= width && IMX_EXA_MIN_SURF_HEIGHT <= height &&
 		imxexa_surf_format_from_bpp(imxPtr->backend, bitsPerPixel, &fPixmapPtr->surfDef.format)) {
 
@@ -1254,6 +1245,44 @@ IMXEXACreatePixmap2(
 			xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
 				"IMXEXACreatePixmap2 failed to allocate GPU surface (code: 0x%08x), c2d mem utilization %u\n",
 				r, imxexa_calc_c2d_allocated_mem(fPtr));
+		}
+	}
+
+	if (NULL == fPixmapPtr->surf) {
+
+		/* Allocate heap storage for sysmem pixmap. */
+
+		/* Compute number of pitch bytes for sysmem pixmaps of the specified geometry. */
+		const int sysPitchBytes =
+			imxexa_calc_system_memory_pitch(width, bitsPerPixel);
+
+		/* Allocate contiguous height * sysPitchBytes from heap. */
+		void* const sysPtr = malloc(height * sysPitchBytes);
+
+		if (NULL != sysPtr) {
+
+			fPixmapPtr->sysPtr = sysPtr;
+			fPixmapPtr->sysPitchBytes = sysPitchBytes;
+
+			*pPitch = sysPitchBytes;
+
+#if IMX_EXA_DEBUG_PIXMAPS
+
+			xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+				"IMXEXACreatePixmap2 allocated system-memory pixmap of stride %d\n",
+				sysPitchBytes);
+#endif
+		}
+		else {
+
+			/* Unregister and free the driver private data associated with pixmap. */
+			imxexa_unregister_pixmap_from_driver(fPtr, fPixmapPtr);
+			free(fPixmapPtr);
+
+			xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+				"IMXEXACreatePixmap2 failed to allocate system memory; no pixmap allocated\n");
+
+			return NULL;
 		}
 	}
 
