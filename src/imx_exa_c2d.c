@@ -2448,9 +2448,17 @@ IMXEXACheckComposite(
 	}
 
 	/* Filter out unsupported blending ops. */
+	Bool success = FALSE;
+
 	switch (op) {
 	case PictOpSrc:
 	case PictOpOver:
+		success = TRUE;
+		break;
+	case PictOpAdd:
+		if (IMXEXA_BACKEND_Z160 == imxPtr->backend)
+			success = TRUE;
+		break;
 /*	case PictOpClear:
 	case PictOpSrc:
 	case PictOpDst:
@@ -2465,22 +2473,23 @@ IMXEXACheckComposite(
 	case PictOpXor:
 	case PictOpAdd:
 	case PictOpSaturate:
-*/		break;
-	default:
+*/	}
+
+	if (success)
+		return TRUE;
 
 #if IMX_EXA_DEBUG_CHECK_COMPOSITE
 
-		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			"IMXEXACheckComposite called with unsupported op (%s)\n",
-			imxexa_string_from_pict_op(op));
+	xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+		"IMXEXACheckComposite called with unsupported op (%s)\n",
+		imxexa_string_from_pict_op(op));
 #endif
-		imxexa_update_pixmap_on_failure(fPtr, fPixmapDstPtr);
-		imxexa_update_pixmap_on_failure(fPtr, fPixmapSrcPtr);
-		imxexa_update_pixmap_on_failure(fPtr, fPixmapMskPtr);
-		return FALSE;
-	}
 
-	return TRUE;
+	imxexa_update_pixmap_on_failure(fPtr, fPixmapDstPtr);
+	imxexa_update_pixmap_on_failure(fPtr, fPixmapSrcPtr);
+	imxexa_update_pixmap_on_failure(fPtr, fPixmapMskPtr);
+
+	return FALSE;
 }
 
 static Bool
@@ -2677,6 +2686,9 @@ IMXEXAPrepareComposite(
 		break;
 	case PictOpOver:
 		c2dSetBlendMode(fPtr->gpuContext, C2D_ALPHA_BLEND_SRCOVER);
+		break;
+	case PictOpAdd:
+		c2dSetBlendMode(fPtr->gpuContext, C2D_ALPHA_BLEND_ADD);
 		break;
 	default:
 		return FALSE;
