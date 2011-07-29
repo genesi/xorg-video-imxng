@@ -49,7 +49,7 @@
 #endif
 
 /* Minimal width and height of pixel surfaces for accelerating operations. */
-#define IMX_EXA_MIN_SURF_WIDTH				8
+#define IMX_EXA_MIN_SURF_AREA				4096
 /* WARNING: Z160 backend MAY have stability issues with surface heights less than 32 (corrupted tooltips etc.). */
 #define	IMX_EXA_MIN_SURF_HEIGHT				32
 /* Maximal dimension of pixel surfaces for accelerating operations. Z160 may have a 1024-pixel limit here but we can repeat?*/
@@ -59,16 +59,16 @@
 #define IMX_EXA_DEBUG_MASTER				(0 && IMX_DEBUG_MASTER)
 
 #define	IMX_EXA_DEBUG_INSTRUMENT_SYNCS		(0 && IMX_EXA_DEBUG_MASTER)
-#define	IMX_EXA_DEBUG_PREPARE_SOLID			(0 && IMX_EXA_DEBUG_MASTER)
-#define	IMX_EXA_DEBUG_SOLID					(0 && IMX_EXA_DEBUG_MASTER)
-#define	IMX_EXA_DEBUG_PREPARE_COPY			(0 && IMX_EXA_DEBUG_MASTER)
-#define	IMX_EXA_DEBUG_COPY					(0 && IMX_EXA_DEBUG_MASTER)
-#define	IMX_EXA_DEBUG_PIXMAPS				(0 && IMX_EXA_DEBUG_MASTER)
-#define	IMX_EXA_DEBUG_CHECK_COMPOSITE		(0 && IMX_EXA_DEBUG_MASTER)
-#define	IMX_EXA_DEBUG_PREPARE_COMPOSITE		(0 && IMX_EXA_DEBUG_MASTER)
-#define	IMX_EXA_DEBUG_COMPOSITE				(0 && IMX_EXA_DEBUG_MASTER)
-#define IMX_EXA_DEBUG_EVICTION				(0 && IMX_EXA_DEBUG_MASTER)
-#define IMX_EXA_DEBUG_DEMOTION				(0 && IMX_EXA_DEBUG_MASTER)
+#define	IMX_EXA_DEBUG_PREPARE_SOLID			(1 && IMX_EXA_DEBUG_MASTER)
+#define	IMX_EXA_DEBUG_SOLID					(1 && IMX_EXA_DEBUG_MASTER)
+#define	IMX_EXA_DEBUG_PREPARE_COPY			(1 && IMX_EXA_DEBUG_MASTER)
+#define	IMX_EXA_DEBUG_COPY					(1 && IMX_EXA_DEBUG_MASTER)
+#define	IMX_EXA_DEBUG_PIXMAPS				(1 && IMX_EXA_DEBUG_MASTER)
+#define	IMX_EXA_DEBUG_CHECK_COMPOSITE		(1 && IMX_EXA_DEBUG_MASTER)
+#define	IMX_EXA_DEBUG_PREPARE_COMPOSITE		(1 && IMX_EXA_DEBUG_MASTER)
+#define	IMX_EXA_DEBUG_COMPOSITE				(1 && IMX_EXA_DEBUG_MASTER)
+#define IMX_EXA_DEBUG_EVICTION				(1 && IMX_EXA_DEBUG_MASTER)
+#define IMX_EXA_DEBUG_DEMOTION				(1 && IMX_EXA_DEBUG_MASTER)
 #define IMX_EXA_DEBUG_TRACE					(0 && IMX_EXA_DEBUG_MASTER)
 
 #if IMX_EXA_DEBUG_TRACE
@@ -1210,7 +1210,7 @@ IMXEXACreatePixmap2(
 	/* Attempt to allocate from gpumem if surface geometry and bitsPerPixel are eligible. */
 	if (NULL != fPtr->gpuContext &&
 		IMX_EXA_MAX_SURF_DIM >= width && IMX_EXA_MAX_SURF_DIM >= height &&
-		IMX_EXA_MIN_SURF_WIDTH <= width && IMX_EXA_MIN_SURF_HEIGHT <= height &&
+		IMX_EXA_MIN_SURF_AREA <= (width*height) && IMX_EXA_MIN_SURF_HEIGHT <= height &&
 		imxexa_surf_format_from_bpp(imxPtr->backend, bitsPerPixel, &fPixmapPtr->surfDef.format)) {
 
 		fPixmapPtr->surfDef.width = width;
