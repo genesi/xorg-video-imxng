@@ -1748,6 +1748,8 @@ IMXEXAPrepareSolid(
 	Pixel planemask,
 	Pixel fg)
 {
+	int rop;
+
 	if (NULL == pPixmap)
 		return FALSE;
 
@@ -1789,8 +1791,16 @@ IMXEXAPrepareSolid(
 	/* Make sure that the raster op is supported. */
 	switch (alu) {
 	case GXclear:
+		rop = 0x0000;
+		break;
+	case GXcopyInverted:
+		rop = 0x3333;
+		break;
 	case GXcopy:
+		rop = 0xCCCC;
+		break;
 	case GXset:
+		rop = 0xFFFF;
 		break;
 
 	default:
@@ -1819,18 +1829,9 @@ IMXEXAPrepareSolid(
 	c2dSetBrushSurface(fPtr->gpuContext, NULL, NULL);
 	c2dSetMaskSurface(fPtr->gpuContext, NULL, NULL);
 
+	c2dSetFgColor(fPtr->gpuContext, fg);
+	c2dSetRop(fPtr->gpuContext, rop);
 	c2dSetBlendMode(fPtr->gpuContext, C2D_ALPHA_BLEND_NONE);
-
-	switch (alu) {
-	case GXclear:
-		c2dSetFgColor(fPtr->gpuContext, 0U);
-		break;
-	case GXset:
-		c2dSetFgColor(fPtr->gpuContext, -1U);
-		break;
-	default: /* GXcopy */
-		c2dSetFgColor(fPtr->gpuContext, fg);
-	}
 
 	/* Mark pixmap as used and update driver's heartbeat. */
 	imxexa_update_pixmap_on_use(fPtr, fPixmapPtr);
@@ -1999,6 +2000,7 @@ IMXEXAPrepareCopy(
 	c2dSetBrushSurface(fPtr->gpuContext, NULL, NULL);
 	c2dSetMaskSurface(fPtr->gpuContext, NULL, NULL);
 
+	c2dSetRop(fPtr->gpuContext, 0xCCCC);
 	c2dSetBlendMode(fPtr->gpuContext, C2D_ALPHA_BLEND_NONE);
 
 	/* Mark pixmaps as used and update driver's heartbeat. */
@@ -2679,6 +2681,8 @@ IMXEXAPrepareComposite(
 	else {
 		c2dSetMaskSurface(fPtr->gpuContext, NULL, NULL);
 	}
+
+	c2dSetRop(fPtr->gpuContext, 0xCCCC);
 
 	switch (op) {
 	case PictOpSrc:
