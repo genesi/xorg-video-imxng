@@ -1748,8 +1748,6 @@ IMXEXAPrepareSolid(
 	Pixel planemask,
 	Pixel fg)
 {
-	int rop;
-
 	if (NULL == pPixmap)
 		return FALSE;
 
@@ -1789,21 +1787,35 @@ IMXEXAPrepareSolid(
 	}
 
 	/* Make sure that the raster op is supported. */
+	unsigned rop = 0xcccc;
+	Bool rop_success = TRUE;
+
 	switch (alu) {
 	case GXclear:
-		rop = 0x0000;
-		break;
-	case GXcopyInverted:
-		rop = 0x3333;
+		if (IMXEXA_BACKEND_Z160 == imxPtr->backend)
+			rop = 0x0000;
+		else
+			fg = 0;
 		break;
 	case GXcopy:
-		rop = 0xCCCC;
+		break;
+	case GXcopyInverted:
+		if (IMXEXA_BACKEND_Z160 == imxPtr->backend)
+			rop = 0x3333;
+		else
+			fg = ~fg;
 		break;
 	case GXset:
-		rop = 0xFFFF;
+		if (IMXEXA_BACKEND_Z160 == imxPtr->backend)
+			rop = 0xffff;
+		else
+			fg = -1U;
 		break;
-
 	default:
+		rop_success = FALSE;
+	}
+
+	if (!rop_success) {
 
 #if IMX_EXA_DEBUG_PREPARE_SOLID
 
@@ -1969,8 +1981,34 @@ IMXEXAPrepareCopy(
 		return FALSE;
 	}
 
-	/* Make sure that the raster op is GXcopy. */
-	if (GXcopy != alu) {
+	/* Make sure that the raster op is supported. */
+	unsigned rop = 0xcccc;
+	Bool rop_success = FALSE;
+
+	switch (alu) {
+	case GXclear:
+		if (IMXEXA_BACKEND_Z160 == imxPtr->backend) {
+			rop = 0x0000;
+			rop_success = TRUE;
+		}
+		break;
+	case GXcopy:
+		rop_success = TRUE;
+		break;
+	case GXcopyInverted:
+		if (IMXEXA_BACKEND_Z160 == imxPtr->backend) {
+			rop = 0x3333;
+			rop_success = TRUE;
+		}
+		break;
+	case GXset:
+		if (IMXEXA_BACKEND_Z160 == imxPtr->backend) {
+			rop = 0xffff;
+			rop_success = TRUE;
+		}
+	}
+
+	if (!rop_success) {
 
 #if IMX_EXA_DEBUG_PREPARE_COPY
 
@@ -2000,7 +2038,7 @@ IMXEXAPrepareCopy(
 	c2dSetBrushSurface(fPtr->gpuContext, NULL, NULL);
 	c2dSetMaskSurface(fPtr->gpuContext, NULL, NULL);
 
-	c2dSetRop(fPtr->gpuContext, 0xCCCC);
+	c2dSetRop(fPtr->gpuContext, rop);
 	c2dSetBlendMode(fPtr->gpuContext, C2D_ALPHA_BLEND_NONE);
 
 	/* Mark pixmaps as used and update driver's heartbeat. */
@@ -2682,7 +2720,7 @@ IMXEXAPrepareComposite(
 		c2dSetMaskSurface(fPtr->gpuContext, NULL, NULL);
 	}
 
-	c2dSetRop(fPtr->gpuContext, 0xCCCC);
+	c2dSetRop(fPtr->gpuContext, 0xcccc);
 
 	switch (op) {
 	case PictOpSrc:
