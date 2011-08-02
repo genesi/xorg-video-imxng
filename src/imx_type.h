@@ -74,9 +74,27 @@ typedef enum {
 } imxexa_backend_t;
 
 #define IMXXV_NUM_PORTS				4U			/* Number of ports supported by this adaptor. */
-#define IMXXV_NUM_PHYS_BUFFERS		(1U << 5)	/* Number of supported physical gstreamer buffers, across all ports. */
+#define IMXXV_NUM_PHYS_BUFFERS		(1U << 4)	/* Number of supported physical gstreamer buffers, per port. */
 
 #define IMXXV_DBLFB_ENABLE			1			/* Enable double-buffered full-screen XV. */
+
+typedef struct {
+	intptr_t						phys_ptr;
+	void*							mapping;
+	size_t							mapping_len;
+	size_t							mapping_offset;
+} XVPhysBufferRec;
+
+typedef struct {
+	C2D_SURFACE_DEF					surfDef;
+	C2D_SURFACE						surf;
+	C2D_SURFACE						surfAux;
+	Bool							report_split;
+
+	XVPhysBufferRec					phys[IMXXV_NUM_PHYS_BUFFERS];
+	unsigned						num_phys;
+
+} XVPortRec;
 
 typedef struct {
 	unsigned char*					fbstart;
@@ -87,6 +105,7 @@ typedef struct {
 	EntityInfoPtr					pEnt;
 	OptionInfoPtr					options;
 
+	/* XV acceleration */
 	DevUnion						xvPortPrivate[IMXXV_NUM_PORTS];
 	C2D_CONTEXT						xvGpuContext;
 	C2D_SURFACE						xvScreenSurf;
@@ -94,17 +113,8 @@ typedef struct {
 	C2D_SURFACE						xvScreenSurf2;
 	unsigned						xvBufferTracker;
 #endif
-	C2D_SURFACE_DEF					xvSurfDef[IMXXV_NUM_PORTS];
-	C2D_SURFACE						xvSurf[IMXXV_NUM_PORTS];
-	C2D_SURFACE						xvSurfAux[IMXXV_NUM_PORTS];
-	Bool							report_split[IMXXV_NUM_PORTS];
+	XVPortRec						xvPort[IMXXV_NUM_PORTS];
 	Bool							use_bilinear_filtering;
-
-	intptr_t						phys_ptr[IMXXV_NUM_PHYS_BUFFERS];
-	void*							mapping[IMXXV_NUM_PHYS_BUFFERS];
-	size_t							mapping_len[IMXXV_NUM_PHYS_BUFFERS];
-	size_t							mapping_offset[IMXXV_NUM_PHYS_BUFFERS];
-	unsigned						num_phys;
 
 	/* EXA acceleration */
 	imxexa_backend_t				backend;

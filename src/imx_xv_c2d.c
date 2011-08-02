@@ -290,18 +290,18 @@ imxxv_delete_port_surface(
 	IMXPtr imxPtr,
 	int port_idx)
 {
-	z2dSurfFree(imxPtr->xvGpuContext, imxPtr->xvSurf[port_idx]);
+	z2dSurfFree(imxPtr->xvGpuContext, imxPtr->xvPort[port_idx].surf);
 
-	imxPtr->xvSurf[port_idx] = NULL;
-	memset(&imxPtr->xvSurfDef[port_idx], 0, sizeof(imxPtr->xvSurfDef[0]));
+	imxPtr->xvPort[port_idx].surf = NULL;
+	memset(&imxPtr->xvPort[port_idx].surfDef, 0, sizeof(imxPtr->xvPort[port_idx].surfDef));
 
-	if (NULL != imxPtr->xvSurfAux[port_idx]) {
+	if (NULL != imxPtr->xvPort[port_idx].surfAux) {
 
-		z2dSurfFree(imxPtr->xvGpuContext, imxPtr->xvSurfAux[port_idx]);
-		imxPtr->xvSurfAux[port_idx] = NULL;
+		z2dSurfFree(imxPtr->xvGpuContext, imxPtr->xvPort[port_idx].surfAux);
+		imxPtr->xvPort[port_idx].surfAux = NULL;
 	}
 
-	imxPtr->report_split[port_idx] = FALSE;
+	imxPtr->xvPort[port_idx].report_split = FALSE;
 }
 
 static int
@@ -369,7 +369,7 @@ IMXXVStopVideo(
 
 	if (cleanup && NULL != imxPtr->xvGpuContext) {
 
-		if (NULL != imxPtr->xvSurf[port_idx]) {
+		if (NULL != imxPtr->xvPort[port_idx].surf) {
 
 			imxxv_delete_port_surface(imxPtr, port_idx);
 
@@ -398,36 +398,34 @@ IMXXVStopVideo(
 
 #endif /* IMXXV_DBLFB_ENABLE */
 
+			unsigned i;
+
+			for (i = 0; i < imxPtr->xvPort[port_idx].num_phys; ++i) {
+
+				if (NULL != imxPtr->xvPort[port_idx].phys[i].mapping)
+					munmap(imxPtr->xvPort[port_idx].phys[i].mapping, imxPtr->xvPort[port_idx].phys[i].mapping_len);
+
+				imxPtr->xvPort[port_idx].phys[i].phys_ptr = 0;
+				imxPtr->xvPort[port_idx].phys[i].mapping = NULL;
+				imxPtr->xvPort[port_idx].phys[i].mapping_len = 0;
+				imxPtr->xvPort[port_idx].phys[i].mapping_offset = 0;
+			}
+
+			imxPtr->xvPort[port_idx].num_phys = 0;
 		}
-
-		/*	TODO: physical buffer records need to be per port, to avoid the mmap stress
-			from closing a port while another one is still playing. */
-		unsigned i;
-
-		for (i = 0; i < imxPtr->num_phys; ++i) {
-
-			if (NULL != imxPtr->mapping[i])
-				munmap(imxPtr->mapping[i], imxPtr->mapping_len[i]);
-
-			imxPtr->phys_ptr[i] = 0;
-			imxPtr->mapping[i] = NULL;
-			imxPtr->mapping_len[i] = 0;
-			imxPtr->mapping_offset[i] = 0;
-		}
-
-		imxPtr->num_phys = 0;
 	}
 }
 
 static inline unsigned
 imxxv_seek_mapping(
 	const IMXPtr imxPtr,
+	const unsigned port_idx,
 	const intptr_t phys_ptr)
 {
 	unsigned i;
 
-	for (i = 0; i < imxPtr->num_phys; ++i)
-		if (phys_ptr == imxPtr->phys_ptr[i])
+	for (i = 0; i < imxPtr->xvPort[port_idx].num_phys; ++i)
+		if (phys_ptr == imxPtr->xvPort[port_idx].phys[i].phys_ptr)
 			return i;
 
 	return -1U;
@@ -439,14 +437,25 @@ imxxv_fill_surface(
 	const C2D_SURFACE surf,
 	const uint32_t color)
 {
+	C2D_RECT rect = {
+		0, 0, 2048, 2048
+	};
+
 	z2dSetDstSurface(context, surf);
 	z2dSetSrcSurface(context, NULL);
 	z2dSetBrushSurface(context, NULL, NULL);
 	z2dSetMaskSurface(context, NULL, NULL);
 	z2dSetBlendMode(context, C2D_ALPHA_BLEND_NONE);
+	z2dSetDstRectangle(context, &rect);
 	z2dSetFgColor(context, color);
 
-	z2dDrawRect(context, C2D_PARAM_FILL_BIT);
+	const C2D_STATUS r = z2dDrawRect(context, C2D_PARAM_FILL_BIT);
+
+	if (C2D_STATUS_OK != r) {
+
+		xf86DrvMsg(0, X_ERROR,
+			"imxxv_fill_surface failed to clear GPU surface (code: 0x%08x)\n", r);
+	}
 }
 
 static void
@@ -538,22 +547,22 @@ IMXXVPutImage(
 
 	const int port_idx = imxxv_port_idx_from_cookie(imxPtr, data);
 
-	if (NULL != imxPtr->xvSurf[port_idx] &&
-		(fmt != imxPtr->xvSurfDef[port_idx].format ||
-		 width > imxPtr->xvSurfDef[port_idx].width ||
-		 height > imxPtr->xvSurfDef[port_idx].height)) {
+	if (NULL != imxPtr->xvPort[port_idx].surf &&
+		(fmt != imxPtr->xvPort[port_idx].surfDef.format ||
+		 width > imxPtr->xvPort[port_idx].surfDef.width ||
+		 height > imxPtr->xvPort[port_idx].surfDef.height)) {
 
 		imxxv_delete_port_surface(imxPtr, port_idx);
 	}
 
-	if (NULL == imxPtr->xvSurf[port_idx]) {
+	if (NULL == imxPtr->xvPort[port_idx].surf) {
 
-		imxPtr->xvSurfDef[port_idx].format	= fmt;
-		imxPtr->xvSurfDef[port_idx].width	= width;
-		imxPtr->xvSurfDef[port_idx].height	= height;
+		imxPtr->xvPort[port_idx].surfDef.format	= fmt;
+		imxPtr->xvPort[port_idx].surfDef.width	= width;
+		imxPtr->xvPort[port_idx].surfDef.height	= height;
 
 		C2D_STATUS r;
-		r = z2dSurfAlloc(imxPtr->xvGpuContext, &imxPtr->xvSurf[port_idx], &imxPtr->xvSurfDef[port_idx]);
+		r = z2dSurfAlloc(imxPtr->xvGpuContext, &imxPtr->xvPort[port_idx].surf, &imxPtr->xvPort[port_idx].surfDef);
 
 		if (C2D_STATUS_OK != r) {
 
@@ -564,19 +573,19 @@ IMXXVPutImage(
 		}
 
 		/* Wipe out the new surface to YUY2 black. */
-		imxxv_fill_surface(imxPtr->xvGpuContext, imxPtr->xvSurf[port_idx], 0x800000U);
+		imxxv_fill_surface(imxPtr->xvGpuContext, imxPtr->xvPort[port_idx].surf, 0x800000U);
 
 		if (width > IMXXV_MAX_BLIT_COORD) {
 
 			C2D_SURFACE_DEF surfDef;
-			memcpy(&surfDef, &imxPtr->xvSurfDef[port_idx], sizeof(surfDef));
+			memcpy(&surfDef, &imxPtr->xvPort[port_idx].surfDef, sizeof(surfDef));
 
 			surfDef.width  = width - IMXXV_MAX_BLIT_COORD;
 			surfDef.buffer = (char *) surfDef.buffer + IMXXV_MAX_BLIT_COORD * bytespp;
 			surfDef.host   = (char *) surfDef.host + IMXXV_MAX_BLIT_COORD * bytespp;
 			surfDef.flags  = C2D_SURFACE_NO_BUFFER_ALLOC;
 
-			r = z2dSurfAlloc(imxPtr->xvGpuContext, &imxPtr->xvSurfAux[port_idx], &surfDef);
+			r = z2dSurfAlloc(imxPtr->xvGpuContext, &imxPtr->xvPort[port_idx].surfAux, &surfDef);
 
 			if (C2D_STATUS_OK != r) {
 
@@ -591,13 +600,13 @@ IMXXVPutImage(
 	/* gstreamer physical buffer support */
 	if (0xbeefc0de == ((intptr_t*) buf)[0]) {
 
-		unsigned idx = imxxv_seek_mapping(imxPtr, ((intptr_t*) buf)[1]);
+		unsigned idx = imxxv_seek_mapping(imxPtr, port_idx, ((intptr_t*) buf)[1]);
 
 		if (-1U == idx) {
 
-			if (IMXXV_NUM_PHYS_BUFFERS > imxPtr->num_phys) {
+			if (IMXXV_NUM_PHYS_BUFFERS > imxPtr->xvPort[port_idx].num_phys) {
 
-				idx = imxPtr->num_phys++;
+				idx = imxPtr->xvPort[port_idx].num_phys++;
 
 				const int pagemask = getpagesize() - 1;
 				const intptr_t phys_ptr = ((intptr_t*) buf)[1];
@@ -610,34 +619,38 @@ IMXXVPutImage(
 
 				const int fd = open("/dev/mem", O_RDWR);
 
-				imxPtr->phys_ptr[idx] = phys_ptr;
-				imxPtr->mapping_offset[idx] = phys_ptr - phys_page_ptr;
-				imxPtr->mapping_len[idx] = (imxPtr->mapping_offset[idx] + src_len + pagemask) & ~pagemask;
-				imxPtr->mapping[idx] = mmap(0, imxPtr->mapping_len[idx], PROT_READ, MAP_SHARED, fd, phys_page_ptr);
+				imxPtr->xvPort[port_idx].phys[idx].phys_ptr = phys_ptr;
+				imxPtr->xvPort[port_idx].phys[idx].mapping_offset = phys_ptr - phys_page_ptr;
+				imxPtr->xvPort[port_idx].phys[idx].mapping_len = (phys_ptr - phys_page_ptr + src_len + pagemask) & ~pagemask;
+				imxPtr->xvPort[port_idx].phys[idx].mapping =
+					mmap(0, imxPtr->xvPort[port_idx].phys[idx].mapping_len, PROT_READ, MAP_SHARED, fd, phys_page_ptr);
 
 				close(fd);
 
 				xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-					"IMXXVPutImage mapping done. Input src len 0x%08x, phys buffer len 0x%08x, virtual mapping %p\n",
-					src_len, imxPtr->mapping_len[idx], imxPtr->mapping[idx]);
+					"IMXXVPutImage mapping done. Port %d, src length 0x%08x, phys buffer length 0x%08x, virtual mapping %p\n",
+					port_idx, src_len,
+					imxPtr->xvPort[port_idx].phys[idx].mapping_len,
+					imxPtr->xvPort[port_idx].phys[idx].mapping);
 			}
 			else {
 				xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-					"IMXXVPutImage is unable to perform virtual mapping of physical ptr 0x%08x\n",
-					((intptr_t*) buf)[1]);
+					"IMXXVPutImage is unable to perform virtual mapping of physical ptr 0x%08x, port %d\n",
+					((intptr_t*) buf)[1], port_idx);
 
 				idx = 0;
 			}
 		}
 
-		buf = (unsigned char*) imxPtr->mapping[idx] + imxPtr->mapping_offset[idx];
+		buf = (unsigned char*) imxPtr->xvPort[port_idx].phys[idx].mapping +
+			imxPtr->xvPort[port_idx].phys[idx].mapping_offset;
 	}
 
 	unsigned char* bits;
 	C2D_STATUS r;
 
 	/* Access-lock the Xv GPU surface. */
-	r = z2dSurfLock(imxPtr->xvGpuContext, imxPtr->xvSurf[port_idx], (void**) &bits);
+	r = z2dSurfLock(imxPtr->xvGpuContext, imxPtr->xvPort[port_idx].surf, (void**) &bits);
 
 	if (C2D_STATUS_OK != r) {
 
@@ -670,7 +683,7 @@ IMXXVPutImage(
 	if (FOURCC_YV12 == image ||
 		FOURCC_I420 == image ) {
 
-		const unsigned int dst_stride = imxPtr->xvSurfDef[port_idx].stride;
+		const unsigned int dst_stride = imxPtr->xvPort[port_idx].surfDef.stride;
 		uint8_t* dst = bits + align_src_y * dst_stride + align_src_x * bytespp;
 
 		const unsigned int lum_stride = width;
@@ -715,7 +728,7 @@ IMXXVPutImage(
 	}
 	else {
 
-		const unsigned int dst_stride = imxPtr->xvSurfDef[port_idx].stride;
+		const unsigned int dst_stride = imxPtr->xvPort[port_idx].surfDef.stride;
 		unsigned char* dst = bits + src_y * dst_stride + align_src_x * bytespp;
 
 		const unsigned int src_stride = width * bytespp;
@@ -732,7 +745,7 @@ IMXXVPutImage(
 	}
 
 	/* Surface updated, unlock it. */
-	z2dSurfUnlock(imxPtr->xvGpuContext, imxPtr->xvSurf[port_idx]);
+	z2dSurfUnlock(imxPtr->xvGpuContext, imxPtr->xvPort[port_idx].surf);
 
 	/* Set various static draw parameters. */
 	z2dSetBrushSurface(imxPtr->xvGpuContext, NULL, NULL);
@@ -803,7 +816,7 @@ IMXXVPutImage(
 			rectSrc.width = 0;
 		}
 
-		if (!imxPtr->report_split[port_idx]) {
+		if (!imxPtr->xvPort[port_idx].report_split) {
 
 			xf86DrvMsg(pScrn->scrnIndex, X_INFO,
 				"IMXXVPutImage split blit "
@@ -818,7 +831,7 @@ IMXXVPutImage(
 				rectDstAux.x,
 				rectDstAux.width);
 
-			imxPtr->report_split[port_idx] = TRUE;
+			imxPtr->xvPort[port_idx].report_split = TRUE;
 		}
 
 		split_blit = TRUE;
@@ -840,7 +853,7 @@ IMXXVPutImage(
 	}
 	else {
 		z2dSetDstSurface(imxPtr->xvGpuContext, imxPtr->xvScreenSurf);
-		z2dSetSrcSurface(imxPtr->xvGpuContext, imxPtr->xvSurf[port_idx]);
+		z2dSetSrcSurface(imxPtr->xvGpuContext, imxPtr->xvPort[port_idx].surf);
 
 		z2dSetSrcRectangle(imxPtr->xvGpuContext, &rectSrc);
 		z2dSetDstRectangle(imxPtr->xvGpuContext, &rectDst);
@@ -875,7 +888,7 @@ IMXXVPutImage(
 				rectDst.x + rectDst.width > box->x1 &&
 				rectDst.y + rectDst.height > box->y1) {
 
-				z2dSetSrcSurface(imxPtr->xvGpuContext, imxPtr->xvSurf[port_idx]);
+				z2dSetSrcSurface(imxPtr->xvGpuContext, imxPtr->xvPort[port_idx].surf);
 
 				z2dSetSrcRectangle(imxPtr->xvGpuContext, &rectSrc);
 				z2dSetDstRectangle(imxPtr->xvGpuContext, &rectDst);
@@ -894,7 +907,7 @@ IMXXVPutImage(
 				continue;
 			}
 
-			z2dSetSrcSurface(imxPtr->xvGpuContext, imxPtr->xvSurfAux[port_idx]);
+			z2dSetSrcSurface(imxPtr->xvGpuContext, imxPtr->xvPort[port_idx].surfAux);
 
 			z2dSetSrcRectangle(imxPtr->xvGpuContext, &rectSrcAux);
 			z2dSetDstRectangle(imxPtr->xvGpuContext, &rectDstAux);
@@ -924,44 +937,42 @@ IMXXVPutImage(
 
 		return BadMatch;
 	}
-	else {
-		/* This is a synchronous movie sequence, show the individual frames on screen ASAP. */
-		/* Note: Next GPU flush effectively doubles the CPU load at presenting a frame, but the */
-		/* frame reaches the screen sooner, as long as the required CPU resource is available. */
+
+	/* This is a synchronous movie sequence, show the individual frames on screen ASAP. */
+	/* Note: Using GPU flush effectively doubles the CPU load at presenting a frame, but the */
+	/* frame reaches the screen sooner, as long as the required CPU resource is available. */
 
 #if IMXXV_DBLFB_ENABLE
 
-		if (full_screen && split_blit) {
+	if (full_screen && split_blit) {
 
-			z2dFinish(imxPtr->xvGpuContext);
+		z2dFinish(imxPtr->xvGpuContext);
 
-			const int fd = fbdevHWGetFD(pScrn);
+		const int fd = fbdevHWGetFD(pScrn);
 
-			struct fb_var_screeninfo varinfo;
+		struct fb_var_screeninfo varinfo;
 
-			if (-1 == ioctl(fd, FBIOGET_VSCREENINFO, &varinfo)) {
-				xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-					"IMXXVPutImage failed at get_vscreeninfo ioctl (errno: %s)\n",
-					strerror(errno));
-			}
-
-			varinfo.yoffset = varinfo.yres * imxPtr->xvBufferTracker;
-
-			if (-1 == ioctl(fd, FBIOPAN_DISPLAY, &varinfo)) {
-				xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-					"IMXXVPutImage failed at pan_display ioctl (errno: %s)\n",
-					strerror(errno));
-			}
+		if (-1 == ioctl(fd, FBIOGET_VSCREENINFO, &varinfo)) {
+			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+				"IMXXVPutImage failed at get_vscreeninfo ioctl (errno: %s)\n",
+				strerror(errno));
 		}
-		else
-			z2dFlush(imxPtr->xvGpuContext);
+
+		varinfo.yoffset = varinfo.yres * imxPtr->xvBufferTracker;
+
+		if (-1 == ioctl(fd, FBIOPAN_DISPLAY, &varinfo)) {
+			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+				"IMXXVPutImage failed at pan_display ioctl (errno: %s)\n",
+				strerror(errno));
+		}
+	}
+	else
+		z2dFlush(imxPtr->xvGpuContext);
 #else
 
-		z2dFlush(imxPtr->xvGpuContext);
+	z2dFlush(imxPtr->xvGpuContext);
 
 #endif /* IMXXV_DBLFB_ENABLE */
-
-	}
 
 	return Success;
 }
