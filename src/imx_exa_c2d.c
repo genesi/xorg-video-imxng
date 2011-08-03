@@ -54,7 +54,7 @@
 #define	IMX_EXA_MIN_SURF_HEIGHT				32
 /* Maximal dimension of pixel surfaces for accelerating operations. */
 #define IMX_EXA_MAX_SURF_DIM 				2048
-/* NOTE: When scale-blitting Z160 cannot address the src beyond the 1024th coord on either axis (it runs out of src coord bits and wraps around), */
+/* NOTE: When scale-blitting Z160 cannot address the src beyond the 1024th row/column (it runs out of src coord bits and wraps around), */
 /* but otherwise it can address 2048 units in each direction. Yet statistically large pixmaps are identity-blitted, so perhaps we can take the risk. */
 
 /* This flag must be enabled to perform any debug logging */
