@@ -48,27 +48,29 @@
 #error This driver can be built only against EXA version 2.5.0 or higher.
 #endif
 
-/* Minimal width and height of pixel surfaces for accelerating operations. */
-#define IMX_EXA_MIN_SURF_AREA				4096
+/* Minimal area of pixel surfaces for accelerating operations. */
+#define IMX_EXA_MIN_SURF_AREA				2048 /* 4KB at 16bpp */
 /* WARNING: Z160 backend MAY have stability issues with surface heights less than 32 (corrupted tooltips etc.). */
 #define	IMX_EXA_MIN_SURF_HEIGHT				32
-/* Maximal dimension of pixel surfaces for accelerating operations. Z160 may have a 1024-pixel limit here but we can repeat?*/
+/* Maximal dimension of pixel surfaces for accelerating operations. */
 #define IMX_EXA_MAX_SURF_DIM 				2048
+/* NOTE: When scale-blitting Z160 cannot address the src beyond the 1024th coord on either axis (it runs out of src coord bits and wraps around), */
+/* but otherwise it can address 2048 units in each direction. Yet statistically large pixmaps are identity-blitted, so perhaps we can take the risk. */
 
 /* This flag must be enabled to perform any debug logging */
 #define IMX_EXA_DEBUG_MASTER				(0 && IMX_DEBUG_MASTER)
 
 #define	IMX_EXA_DEBUG_INSTRUMENT_SYNCS		(0 && IMX_EXA_DEBUG_MASTER)
-#define	IMX_EXA_DEBUG_PREPARE_SOLID			(1 && IMX_EXA_DEBUG_MASTER)
-#define	IMX_EXA_DEBUG_SOLID					(1 && IMX_EXA_DEBUG_MASTER)
-#define	IMX_EXA_DEBUG_PREPARE_COPY			(1 && IMX_EXA_DEBUG_MASTER)
-#define	IMX_EXA_DEBUG_COPY					(1 && IMX_EXA_DEBUG_MASTER)
-#define	IMX_EXA_DEBUG_PIXMAPS				(1 && IMX_EXA_DEBUG_MASTER)
-#define	IMX_EXA_DEBUG_CHECK_COMPOSITE		(1 && IMX_EXA_DEBUG_MASTER)
-#define	IMX_EXA_DEBUG_PREPARE_COMPOSITE		(1 && IMX_EXA_DEBUG_MASTER)
-#define	IMX_EXA_DEBUG_COMPOSITE				(1 && IMX_EXA_DEBUG_MASTER)
-#define IMX_EXA_DEBUG_EVICTION				(1 && IMX_EXA_DEBUG_MASTER)
-#define IMX_EXA_DEBUG_DEMOTION				(1 && IMX_EXA_DEBUG_MASTER)
+#define	IMX_EXA_DEBUG_PREPARE_SOLID			(0 && IMX_EXA_DEBUG_MASTER)
+#define	IMX_EXA_DEBUG_SOLID					(0 && IMX_EXA_DEBUG_MASTER)
+#define	IMX_EXA_DEBUG_PREPARE_COPY			(0 && IMX_EXA_DEBUG_MASTER)
+#define	IMX_EXA_DEBUG_COPY					(0 && IMX_EXA_DEBUG_MASTER)
+#define	IMX_EXA_DEBUG_PIXMAPS				(0 && IMX_EXA_DEBUG_MASTER)
+#define	IMX_EXA_DEBUG_CHECK_COMPOSITE		(0 && IMX_EXA_DEBUG_MASTER)
+#define	IMX_EXA_DEBUG_PREPARE_COMPOSITE		(0 && IMX_EXA_DEBUG_MASTER)
+#define	IMX_EXA_DEBUG_COMPOSITE				(0 && IMX_EXA_DEBUG_MASTER)
+#define IMX_EXA_DEBUG_EVICTION				(0 && IMX_EXA_DEBUG_MASTER)
+#define IMX_EXA_DEBUG_DEMOTION				(0 && IMX_EXA_DEBUG_MASTER)
 #define IMX_EXA_DEBUG_TRACE					(0 && IMX_EXA_DEBUG_MASTER)
 
 #if IMX_EXA_DEBUG_TRACE
@@ -654,6 +656,13 @@ imxexa_gpu_context_release(
 		}
 	}
 
+#if IMX_EXA_DEBUG_PIXMAPS
+
+	xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+		"gpumem watermark: %u\n", fPtr->gpumem_watermark);
+
+#endif /* IMX_EXA_DEBUG_PIXMAPS */
+
 	/* We are done with this context. */
 	r = c2dDestroyContext(fPtr->gpuContext);
 	fPtr->gpuContext = NULL;
@@ -1210,7 +1219,7 @@ IMXEXACreatePixmap2(
 	/* Attempt to allocate from gpumem if surface geometry and bitsPerPixel are eligible. */
 	if (NULL != fPtr->gpuContext &&
 		IMX_EXA_MAX_SURF_DIM >= width && IMX_EXA_MAX_SURF_DIM >= height &&
-		IMX_EXA_MIN_SURF_AREA <= (width*height) && IMX_EXA_MIN_SURF_HEIGHT <= height &&
+		IMX_EXA_MIN_SURF_AREA <= (width * height) && IMX_EXA_MIN_SURF_HEIGHT <= height &&
 		imxexa_surf_format_from_bpp(imxPtr->backend, bitsPerPixel, &fPixmapPtr->surfDef.format)) {
 
 		fPixmapPtr->surfDef.width = width;
@@ -1238,6 +1247,11 @@ IMXEXACreatePixmap2(
 			xf86DrvMsg(pScrn->scrnIndex, X_INFO,
 				"IMXEXACreatePixmap2 allocated offscreen pixmap of stride %u - %s\n",
 				fPixmapPtr->surfDef.stride, (fPixmapPtr->surfDef.stride % (32 / 8 * bitsPerPixel) ? "wrong" : "ok"));
+
+			const uint32_t gpumem = imxexa_calc_c2d_allocated_mem(fPtr);
+
+			if (gpumem > fPtr->gpumem_watermark)
+				fPtr->gpumem_watermark = gpumem;
 #endif
 		}
 		else {

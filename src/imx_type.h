@@ -151,6 +151,7 @@ typedef struct _IMXEXARec {
 	uint64_t		heartbeat;					/* counter incremented with each eax op */
 
 #if IMX_DEBUG_MASTER
+	uint32_t		gpumem_watermark;
 	unsigned long	numSolidBeforeSync;
 	unsigned long	numCopyBeforeSync;
 	unsigned long	numConvBeforeSync;

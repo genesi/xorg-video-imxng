@@ -56,10 +56,11 @@
 #define IMXXV_MAX_IMG_WIDTH		2048 /* Must be even. */
 #define IMXXV_MAX_IMG_HEIGHT	1024 /* Must be even. */
 
-#define IMXXV_MAX_OUT_WIDTH		2048 /* Z160 cannot scale beyond this width. */
-#define IMXXV_MAX_OUT_HEIGHT	2048 /* Z160 cannot scale beyond this height. */
+#define IMXXV_MAX_OUT_WIDTH		2048
+#define IMXXV_MAX_OUT_HEIGHT	2048
 
-#define IMXXV_MAX_BLIT_COORD	1024 /* Z160 cannot address YUV surfaces beyond this src coord. */
+#define IMXXV_MAX_BLIT_COORD	1024
+/* NOTE: When scale-blitting Z160 cannot address the src beyond the 1024th coord on either axis - it runs out of src coord bits and wraps around. */
 
 /* Hooks to c2d_z160 API. */
 typedef C2D_STATUS (*Z2DCreateContext)(C2D_CONTEXT *a_c2dContext);
