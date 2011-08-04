@@ -1801,32 +1801,24 @@ IMXEXAPrepareSolid(
 	}
 
 	/* Make sure that the raster op is supported. */
-	unsigned rop = 0xcccc;
-	Bool rop_success = TRUE;
+	Bool rop_success = FALSE;
 
 	switch (alu) {
 	case GXclear:
-		if (IMXEXA_BACKEND_Z160 == imxPtr->backend)
-			rop = 0x0000;
-		else
-			fg = 0;
+		fg = 0;
+		rop_success = TRUE;
 		break;
 	case GXcopy:
+		rop_success = TRUE;
 		break;
 	case GXcopyInverted:
-		if (IMXEXA_BACKEND_Z160 == imxPtr->backend)
-			rop = 0x3333;
-		else
-			fg = ~fg;
+		fg = ~fg;
+		rop_success = TRUE;
 		break;
 	case GXset:
-		if (IMXEXA_BACKEND_Z160 == imxPtr->backend)
-			rop = 0xffff;
-		else
-			fg = -1U;
+		fg = -1U;
+		rop_success = TRUE;
 		break;
-	default:
-		rop_success = FALSE;
 	}
 
 	if (!rop_success) {
@@ -1834,7 +1826,7 @@ IMXEXAPrepareSolid(
 #if IMX_EXA_DEBUG_PREPARE_SOLID
 
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			"IMXEXAPrepareSolid called with unsupported rop=0x%08x\n",
+			"IMXEXAPrepareSolid called with unsupported rop 0x%08x\n",
 			(unsigned) alu);
 #endif
 		imxexa_update_pixmap_on_failure(fPtr, fPixmapPtr);
@@ -1856,7 +1848,6 @@ IMXEXAPrepareSolid(
 	c2dSetMaskSurface(fPtr->gpuContext, NULL, NULL);
 
 	c2dSetFgColor(fPtr->gpuContext, fg);
-	c2dSetRop(fPtr->gpuContext, rop);
 	c2dSetBlendMode(fPtr->gpuContext, C2D_ALPHA_BLEND_NONE);
 
 	/* Mark pixmap as used and update driver's heartbeat. */
@@ -1996,30 +1987,12 @@ IMXEXAPrepareCopy(
 	}
 
 	/* Make sure that the raster op is supported. */
-	unsigned rop = 0xcccc;
 	Bool rop_success = FALSE;
 
 	switch (alu) {
-	case GXclear:
-		if (IMXEXA_BACKEND_Z160 == imxPtr->backend) {
-			rop = 0x0000;
-			rop_success = TRUE;
-		}
-		break;
 	case GXcopy:
 		rop_success = TRUE;
 		break;
-	case GXcopyInverted:
-		if (IMXEXA_BACKEND_Z160 == imxPtr->backend) {
-			rop = 0x3333;
-			rop_success = TRUE;
-		}
-		break;
-	case GXset:
-		if (IMXEXA_BACKEND_Z160 == imxPtr->backend) {
-			rop = 0xffff;
-			rop_success = TRUE;
-		}
 	}
 
 	if (!rop_success) {
@@ -2027,7 +2000,7 @@ IMXEXAPrepareCopy(
 #if IMX_EXA_DEBUG_PREPARE_COPY
 
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			"IMXEXAPrepareCopy called with rop=0x%08x which is not GXcopy\n",
+			"IMXEXAPrepareCopy called with unsupported rop 0x%08x\n",
 			(unsigned)alu);
 #endif
 		imxexa_update_pixmap_on_failure(fPtr, fPixmapDstPtr);
@@ -2052,7 +2025,6 @@ IMXEXAPrepareCopy(
 	c2dSetBrushSurface(fPtr->gpuContext, NULL, NULL);
 	c2dSetMaskSurface(fPtr->gpuContext, NULL, NULL);
 
-	c2dSetRop(fPtr->gpuContext, rop);
 	c2dSetBlendMode(fPtr->gpuContext, C2D_ALPHA_BLEND_NONE);
 
 	/* Mark pixmaps as used and update driver's heartbeat. */
@@ -2733,8 +2705,6 @@ IMXEXAPrepareComposite(
 	else {
 		c2dSetMaskSurface(fPtr->gpuContext, NULL, NULL);
 	}
-
-	c2dSetRop(fPtr->gpuContext, 0xcccc);
 
 	switch (op) {
 	case PictOpSrc:
