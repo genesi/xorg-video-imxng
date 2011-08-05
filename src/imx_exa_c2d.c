@@ -320,7 +320,7 @@ imxexa_string_from_pict_op(
 	return "unknown";
 }
 
-static inline const char*
+const char*
 imxexa_string_from_c2d_format(
 	C2D_COLORFORMAT format)
 {

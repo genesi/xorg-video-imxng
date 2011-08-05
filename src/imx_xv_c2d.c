@@ -26,6 +26,7 @@
 #define IMXXV_VSYNC_ENABLE		0	/* flag: wait for vsync before showing a frame */
 #define IMXXV_VSYNC_NUM_RETRIES	0	/* max num of vsync retries due to syscall interrupts */
 #define IMXXV_VSYNC_DEBUG		0	/* flag: report wait-for-vsync ioctl errors */
+#define IMXXV_SURF_ALLOC_DEBUG	1
 
 #include <xf86.h>
 #include <xf86xv.h>
@@ -193,6 +194,94 @@ imxxv_find_port_attribute(
 			return idx;
 
 	return -1;
+}
+
+extern const char*
+imxexa_string_from_c2d_format(
+	C2D_COLORFORMAT format);
+
+static inline unsigned
+imxxv_bpp_from_c2d_format(
+	C2D_COLORFORMAT format)
+{
+	switch (format) {
+
+	/* 1bpp formats */
+	case C2D_COLOR_A1:
+		return 1;
+
+	/* 4bpp formats */
+	case C2D_COLOR_A4:
+		return 4;
+
+	/* 8bpp formats */
+	case C2D_COLOR_A8:
+	case C2D_COLOR_8:
+		return 8;
+
+	/* 16bpp formats */
+	case C2D_COLOR_4444:
+	case C2D_COLOR_4444_RGBA:
+	case C2D_COLOR_1555:
+	case C2D_COLOR_5551_RGBA:
+	case C2D_COLOR_0565:
+		return 16;
+
+	/* 32bpp formats */
+	case C2D_COLOR_8888:
+	case C2D_COLOR_8888_RGBA:
+	case C2D_COLOR_8888_ABGR:
+		return 32;
+
+	/* 24bpp formats */
+	case C2D_COLOR_888:
+		return 24;
+
+	/* 16bpp formats */
+	case C2D_COLOR_YVYU:
+	case C2D_COLOR_UYVY:
+	case C2D_COLOR_YUY2:
+		return 16;
+
+	/* Pacify the compiler. */
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+static inline const char*
+imxxv_string_from_c2d_surface(
+	const C2D_SURFACE_DEF* surfDef)
+{
+	static char buf[1024];
+
+	snprintf(buf, sizeof(buf) / sizeof(buf[0]), "%s %ux%u stride: %u pa: %p va: %p stride_based_size: %u",
+		imxexa_string_from_c2d_format(surfDef->format),
+		surfDef->width,
+		surfDef->height,
+		surfDef->stride,
+		surfDef->buffer,
+		surfDef->host,
+		surfDef->height * surfDef->stride);
+
+	return buf;
+}
+
+static inline const char*
+imxxv_string_from_unalloc_c2d_surface(
+	const C2D_SURFACE_DEF* surfDef)
+{
+	static char buf[1024];
+
+	snprintf(buf, sizeof(buf) / sizeof(buf[0]), "%s %ux%u estimated_size: %u",
+		imxexa_string_from_c2d_format(surfDef->format),
+		surfDef->width,
+		surfDef->height,
+		surfDef->width * surfDef->height * imxxv_bpp_from_c2d_format(surfDef->format) / 8);
+
+	return buf;
 }
 
 #if IMXXV_VSYNC_ENABLE
@@ -518,6 +607,14 @@ IMXXVPutImage(
 		imxPtr->xvPort[port_idx].surfDef.width	= width;
 		imxPtr->xvPort[port_idx].surfDef.height	= height;
 
+#if IMXXV_SURF_ALLOC_DEBUG
+
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+			"IMXXVPutImage about to allocate surface: %s\n",
+			imxxv_string_from_unalloc_c2d_surface(&imxPtr->xvPort[port_idx].surfDef));
+
+#endif /* IMXXV_SURF_ALLOC_DEBUG */
+
 		C2D_STATUS r;
 		r = c2dSurfAlloc(imxPtr->xvGpuContext, &imxPtr->xvPort[port_idx].surf, &imxPtr->xvPort[port_idx].surfDef);
 
@@ -528,6 +625,14 @@ IMXXVPutImage(
 
 			return BadAlloc;
 		}
+
+#if IMXXV_SURF_ALLOC_DEBUG
+
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+			"IMXXVPutImage allocated surface: %s\n",
+			imxxv_string_from_c2d_surface(&imxPtr->xvPort[port_idx].surfDef));
+
+#endif /* IMXXV_SURF_ALLOC_DEBUG */
 
 		/* Wipe out the new surface to YUY2 black. */
 		imxxv_fill_surface(imxPtr->xvGpuContext, imxPtr->xvPort[port_idx].surf, 0x800000U);
