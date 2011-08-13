@@ -62,7 +62,8 @@
 #define IMXXV_MAX_OUT_HEIGHT	2048 /* Port max vertical resolution. */
 
 #define IMXXV_MAX_BLIT_COORD	1024
-/* NOTE: When scale-blitting Z160 cannot address the src beyond the 1024th row/column (it runs out of src coord bits and wraps around). */
+/* NOTE: When scale-blitting Z160 cannot address a source beyond the 1024th row/column */
+/* (it runs out of src coord bits and wraps around). */
 
 /* Adaptor encodings. */
 static XF86VideoEncodingRec imxVideoEncoding[] =

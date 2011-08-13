@@ -50,12 +50,13 @@
 
 /* Minimal area of pixel surfaces for accelerating operations. */
 #define IMX_EXA_MIN_SURF_AREA				2048 /* 4KB at 16bpp */
-/* WARNING: Z160 backend MAY have stability issues with surface heights less than 32 (corrupted tooltips etc.). */
+/* WARNING: Z160 backend may have stability issues with surface heights less than 32 (corrupted tooltips etc.). */
 #define	IMX_EXA_MIN_SURF_HEIGHT				32
 /* Maximal dimension of pixel surfaces for accelerating operations. */
 #define IMX_EXA_MAX_SURF_DIM 				2048
-/* NOTE: When scale-blitting Z160 cannot address the src beyond the 1024th row/column (it runs out of src coord bits and wraps around), */
-/* but otherwise it can address 2048 units in each direction. Yet statistically large pixmaps are identity-blitted, so perhaps we can take the risk. */
+/* NOTE: When scale-blitting Z160 cannot address a source beyond the 1024th row/column */
+/* (it runs out of src coord bits and wraps around), but otherwise it can address 2048 units */
+/* in each direction. Large pixmaps are usually identity-blitted, so we take the risk. */
 
 /* This flag must be enabled to perform any debug logging */
 #define IMX_EXA_DEBUG_MASTER				(0 && IMX_DEBUG_MASTER)
@@ -82,7 +83,7 @@ static unsigned trace;
 
 static inline Bool is_tracing()
 {
-	return trace & 1;
+	return 2 == trace & 3;
 }
 
 #endif
@@ -1589,25 +1590,6 @@ IMXEXAModifyPixmapHeader(
 			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 				"IMXEXAModifyPixmapHeader attempted to modify address of driver-allocated system-memory pixmap\n");
 		}
-
-		if (NULL == fPixmapPtr->sysPtr) {
-
-			xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
-				"IMXEXAModifyPixmapHeader left undefined pixmap (%p):\n"
-				"\twidth: %d (rec: %d)\n"
-				"\theight: %d (rec: %d)\n"
-				"\tdepth: %d (rec: %d)\n"
-				"\tbitsPerPixel: %d (rec: %d)\n"
-				"\tstride: %d (rec: %d)\n"
-				"\tptr: %p (rec: %p)\n",
-				pPixmap,
-				width, fPixmapPtr->width,
-				height, fPixmapPtr->height,
-				depth, fPixmapPtr->depth,
-				bitsPerPixel, fPixmapPtr->bitsPerPixel,
-				devKind, fPixmapPtr->sysPitchBytes,
-				pPixData, fPixmapPtr->sysPtr);
-		}
 	}
 
 #endif /* IMX_EXA_DEBUG_PIXMAPS */
@@ -1793,7 +1775,7 @@ IMXEXAPrepareSolid(
 #if IMX_EXA_DEBUG_PREPARE_SOLID
 
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			"IMXEXAPrepareSolid called with planemask=0x%08x which is not solid\n",
+			"IMXEXAPrepareSolid called with planemask 0x%08x which is not solid\n",
 			(unsigned)planemask);
 #endif
 		imxexa_update_pixmap_on_failure(fPtr, fPixmapPtr);
@@ -1863,14 +1845,6 @@ IMXEXASolid(
 	int x1, int y1,
 	int x2, int y2)
 {
-	/* Compute the width and height of the rectangle to fill. */
-	const int width = x2 - x1;
-	const int height = y2 - y1;
-
-	/* Nothing to do if rectangle is malformed. */
-	if (0 >= width || 0 >= height)
-		return;
-
 	/* Access screen info associated with this pixmap */
 	ScrnInfoPtr pScrn = xf86Screens[pPixmap->drawable.pScreen->myNum];
 
@@ -1881,9 +1855,19 @@ IMXEXASolid(
 	C2D_RECT rect = {
 		.x = x1,
 		.y = y1,
-		.width = width,
-		.height = height
+		.width = x2 - x1,
+		.height = y2 - y1
 	};
+
+	/* Z160 may produce artifacts at 1-pixel-sized ops. */
+	if (IMXEXA_BACKEND_Z160 == imxPtr->backend &&
+		1 == rect.width &&
+		1 == rect.height) {
+
+		c2dSetDstClipRect(fPtr->gpuContext, &rect);
+
+		rect.width = 2;
+	}
 
 	c2dSetDstRectangle(fPtr->gpuContext, &rect);
 
@@ -1895,6 +1879,8 @@ IMXEXASolid(
 			"IMXEXASolid failed to perform GPU draw (code: 0x%08x)\n", r);
 	}
 
+	c2dSetDstClipRect(fPtr->gpuContext, NULL);
+
 #if IMX_EXA_DEBUG_INSTRUMENT_SYNCS
 
 	++fPtr->numSolidBeforeSync;
@@ -1902,10 +1888,22 @@ IMXEXASolid(
 #endif
 
 #if IMX_EXA_DEBUG_SOLID
+
 	xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-		"IMXEXASolid called with rect=(%d-%d,%d-%d)\n",
+		"IMXEXASolid called with rect (%d-%d, %d-%d)\n",
 		x1, x2, y1, y2);
+
+#elif IMX_EXA_DEBUG_TRACE
+
+	if (is_tracing()) {
+
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+			"IMXEXASolid called with rect (%d-%d, %d-%d)\n",
+			x1, x2, y1, y2);
+	}
+
 #endif
+
 }
 
 static void
@@ -1978,7 +1976,7 @@ IMXEXAPrepareCopy(
 #if IMX_EXA_DEBUG_PREPARE_COPY
 
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			"IMXEXAPrepareCopy called with planemask=0x%08x which is not solid\n",
+			"IMXEXAPrepareCopy called with planemask 0x%08x which is not solid\n",
 			(unsigned)planemask);
 #endif
 		imxexa_update_pixmap_on_failure(fPtr, fPixmapDstPtr);
@@ -2036,7 +2034,8 @@ IMXEXAPrepareCopy(
 }
 
 static void
-IMXEXACopy(PixmapPtr pPixmapDst,
+IMXEXACopy(
+	PixmapPtr pPixmapDst,
 	int srcX, int srcY,
 	int dstX, int dstY,
 	int width, int height)
@@ -2054,12 +2053,24 @@ IMXEXACopy(PixmapPtr pPixmapDst,
 		.width = width,
 		.height = height
 	};
+
 	C2D_RECT rectSrc = {
 		.x = srcX,
 		.y = srcY,
 		.width = width,
 		.height = height
 	};
+
+	/* Z160 may produce artifacts at 1-pixel-sized ops. */
+	if (IMXEXA_BACKEND_Z160 == imxPtr->backend &&
+		1 == width &&
+		1 == height) {
+
+		c2dSetDstClipRect(fPtr->gpuContext, &rectDst);
+
+		rectDst.width = 2;
+		rectSrc.width = 2;
+	}
 
 	c2dSetDstRectangle(fPtr->gpuContext, &rectDst);
 	c2dSetSrcRectangle(fPtr->gpuContext, &rectSrc);
@@ -2072,6 +2083,8 @@ IMXEXACopy(PixmapPtr pPixmapDst,
 			"IMXEXACopy failed to perform GPU draw (code: 0x%08x)\n", r);
 	}
 
+	c2dSetDstClipRect(fPtr->gpuContext, NULL);
+
 #if IMX_EXA_DEBUG_INSTRUMENT_SYNCS
 
 	++fPtr->numCopyBeforeSync;
@@ -2081,8 +2094,18 @@ IMXEXACopy(PixmapPtr pPixmapDst,
 #if IMX_EXA_DEBUG_COPY
 
 	xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-		"IMXEXACopy called with src=(%d-%d,%d-%d) dst=(%d-%d,%d-%d)\n",
+		"IMXEXACopy called with src (%d-%d, %d-%d), dst (%d-%d, %d-%d)\n",
 		srcX, srcX + width, srcY, srcY + height, dstX, dstX + width, dstY, dstY + height);
+
+#elif IMX_EXA_DEBUG_TRACE
+
+	if (is_tracing()) {
+
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+			"IMXEXACopy called with src (%d-%d, %d-%d), dst (%d-%d, %d-%d)\n",
+			srcX, srcX + width, srcY, srcY + height, dstX, dstX + width, dstY, dstY + height);
+	}
+
 #endif
 }
 
@@ -2295,7 +2318,9 @@ IMXEXADownloadFromScreen(
 }
 
 static void
-IMXEXAWaitMarker(ScreenPtr pScreen, int marker)
+IMXEXAWaitMarker(
+	ScreenPtr pScreen,
+	int marker)
 {
 	/* Access screen info associated with this screen. */
 	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
@@ -2332,8 +2357,9 @@ IMXEXAWaitMarker(ScreenPtr pScreen, int marker)
 
 #endif
 
-	/* No need to actually sync here, as CPU access to GPU surfaces */
-	/* is synced implicitly. Just update the sync status. */
+	/* We use a surface-lock mechanism when doing CPU access to GPU surfaces, */
+	/* so no need to sync here. Just update the sync status. By doing so we achieve */
+	/* higher cpu-gpu concurrency. */
 	fPtr->gpuSynced = TRUE;
 }
 
@@ -2728,12 +2754,25 @@ IMXEXAPrepareComposite(
 
 #if IMX_EXA_DEBUG_PREPARE_COMPOSITE
 
-	xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+	xf86DrvMsg(pScrn->scrnIndex, X_INFO,
 		"IMXEXAPrepareComposite called with %s on dst, src, msk (priv rec %p %p %p)\n",
 		imxexa_string_from_pict_op(op),
 		fPixmapDstPtr,
 		fPixmapSrcPtr,
 		fPixmapMskPtr);
+
+#elif IMX_EXA_DEBUG_TRACE
+
+	if (is_tracing()) {
+
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+			"IMXEXAPrepareComposite called with %s on dst, src, msk (priv rec %p %p %p)\n",
+			imxexa_string_from_pict_op(op),
+			fPixmapDstPtr,
+			fPixmapSrcPtr,
+			fPixmapMskPtr);
+	}
+
 #endif
 
 	return TRUE;
@@ -2758,17 +2797,13 @@ IMXEXAComposite(
 	IMXPtr imxPtr = IMXPTR(pScrn);
 	IMXEXAPtr fPtr = IMXEXAPTR(imxPtr);
 
-	/* Access driver private data associated with pixmaps. */
-	IMXEXAPixmapPtr fPixmapDstPtr = fPtr->pPixDst;
-	IMXEXAPixmapPtr fPixmapSrcPtr = fPtr->pPixSrc;
-	IMXEXAPixmapPtr fPixmapMskPtr = fPtr->pPixMsk;
-
 	C2D_RECT rectDst = {
 		.x = dstX,
 		.y = dstY,
 		.width = width,
 		.height = height
 	};
+
 	C2D_RECT rectSrc = {
 		.x = srcX,
 		.y = srcY,
@@ -2776,68 +2811,35 @@ IMXEXAComposite(
 		.height = height
 	};
 
-#if IMX_EXA_DEBUG_COMPOSITE
+	/* Z160 may produce artifacts at 1-pixel-sized ops. */
+	if (IMXEXA_BACKEND_Z160 == imxPtr->backend &&
+		1 == width &&
+		1 == height) {
 
-	if (NULL != fPixmapMskPtr && (maskX || maskY)) {
+		c2dSetDstClipRect(fPtr->gpuContext, &rectDst);
 
-		xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-			"IMXEXAComposite called with mask offset %d, %d, mask pixmap (priv rec %p)\n",
-			maskX, maskY, fPixmapMskPtr);
+		rectDst.width = 2;
+		rectSrc.width = 2;
 	}
-
-#endif
 
 	c2dSetDstRectangle(fPtr->gpuContext, &rectDst);
 	c2dSetSrcRectangle(fPtr->gpuContext, &rectSrc);
 
 	C2D_STATUS r;
 
-	if (fPtr->composRepeat) {
+	if (fPtr->composRepeat)
 		r = c2dDrawRect(fPtr->gpuContext, C2D_PARAM_PATTERN_BIT);
-	}
-	else {
+	else
 		r = c2dDrawBlit(fPtr->gpuContext);
-	}
 
 	if (C2D_STATUS_OK != r) {
 
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 			"IMXEXAComposite failed to perform GPU draw (code: 0x%08x) - %s\n",
 			r, (fPtr->composRepeat ? "pattern fill" : "blit"));
-
-#if IMX_EXA_DEBUG_COMPOSITE
-
-		if (NULL != fPixmapDstPtr) {
-
-			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-				"IMXEXAComposite dst: %s\n",
-				imxexa_string_from_priv_pixmap(fPixmapDstPtr));
-
-			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-				"IMXEXAComposite dst rect: %s\n",
-				imxexa_string_from_c2d_rect(&rectDst));
-		}
-
-		if (NULL != fPixmapSrcPtr) {
-
-			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-				"IMXEXAComposite src: %s\n",
-				imxexa_string_from_priv_pixmap(fPixmapSrcPtr));
-
-			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-				"IMXEXAComposite src rect: %s\n",
-				imxexa_string_from_c2d_rect(&rectSrc));
-		}
-
-		if (NULL != fPixmapMskPtr) {
-
-			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-				"IMXEXAComposite msk: %s\n",
-				imxexa_string_from_priv_pixmap(fPixmapMskPtr));
-		}
-
-#endif /* IMX_EXA_DEBUG_COMPOSITE */
 	}
+
+	c2dSetDstClipRect(fPtr->gpuContext, NULL);
 
 #if IMX_EXA_DEBUG_INSTRUMENT_SYNCS
 
@@ -2847,6 +2849,35 @@ IMXEXAComposite(
 		++fPtr->numConvBeforeSync;
 
 #endif
+
+#if IMX_EXA_DEBUG_COMPOSITE
+
+	xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+		"IMXEXAComposite called with src (%d-%d, %d-%d), mask offset (%d, %d), dst (%d-%d, %d-%d)\n",
+		srcX, srcX + width,
+		srcY, srcY + height,
+		maskX,
+		maskY,
+		dstX, dstX + width,
+		dstY, dstY + height);
+	}
+
+#elif IMX_EXA_DEBUG_TRACE
+
+	if (is_tracing()) {
+
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+			"IMXEXAComposite called with src (%d-%d, %d-%d), mask offset (%d, %d), dst (%d-%d, %d-%d)\n",
+			srcX, srcX + width,
+			srcY, srcY + height,
+			maskX,
+			maskY,
+			dstX, dstX + width,
+			dstY, dstY + height);
+	}
+
+#endif
+
 }
 
 static void
@@ -2943,8 +2974,8 @@ IMX_EXA_ScreenInit(int scrnIndex, ScreenPtr pScreen)
 	imxPtr->exaDriverPtr->memoryBase = imxPtr->fbstart;
 	imxPtr->exaDriverPtr->memorySize = fbdevHWGetVidmem(pScrn);
 	imxPtr->exaDriverPtr->offScreenBase = numScreenBytes;
-	imxPtr->exaDriverPtr->pixmapOffsetAlign = 4096;
-	imxPtr->exaDriverPtr->pixmapPitchAlign = 32 * 4;
+	imxPtr->exaDriverPtr->pixmapOffsetAlign = 4096; /* page boundary */
+	imxPtr->exaDriverPtr->pixmapPitchAlign = 32 * 4; /* 32 pixels by 32bpp max */
 	imxPtr->exaDriverPtr->maxPitchBytes = IMX_EXA_MAX_SURF_DIM * 4;
 	imxPtr->exaDriverPtr->maxX = IMX_EXA_MAX_SURF_DIM - 1;
 	imxPtr->exaDriverPtr->maxY = IMX_EXA_MAX_SURF_DIM - 1;
