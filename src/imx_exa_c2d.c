@@ -1859,16 +1859,7 @@ IMXEXASolid(
 		.height = y2 - y1
 	};
 
-	/* Z160 may produce artifacts at 1-pixel-sized ops. */
-	if (IMXEXA_BACKEND_Z160 == imxPtr->backend &&
-		1 == rect.width &&
-		1 == rect.height) {
-
-		c2dSetDstClipRect(fPtr->gpuContext, &rect);
-
-		rect.width = 2;
-	}
-
+	c2dSetDstClipRect(fPtr->gpuContext, &rect);
 	c2dSetDstRectangle(fPtr->gpuContext, &rect);
 
 	const C2D_STATUS r = c2dDrawRect(fPtr->gpuContext, C2D_PARAM_FILL_BIT);
@@ -2061,17 +2052,7 @@ IMXEXACopy(
 		.height = height
 	};
 
-	/* Z160 may produce artifacts at 1-pixel-sized ops. */
-	if (IMXEXA_BACKEND_Z160 == imxPtr->backend &&
-		1 == width &&
-		1 == height) {
-
-		c2dSetDstClipRect(fPtr->gpuContext, &rectDst);
-
-		rectDst.width = 2;
-		rectSrc.width = 2;
-	}
-
+	c2dSetDstClipRect(fPtr->gpuContext, &rectDst);
 	c2dSetDstRectangle(fPtr->gpuContext, &rectDst);
 	c2dSetSrcRectangle(fPtr->gpuContext, &rectSrc);
 
@@ -2811,17 +2792,7 @@ IMXEXAComposite(
 		.height = height
 	};
 
-	/* Z160 may produce artifacts at 1-pixel-sized ops. */
-	if (IMXEXA_BACKEND_Z160 == imxPtr->backend &&
-		1 == width &&
-		1 == height) {
-
-		c2dSetDstClipRect(fPtr->gpuContext, &rectDst);
-
-		rectDst.width = 2;
-		rectSrc.width = 2;
-	}
-
+	c2dSetDstClipRect(fPtr->gpuContext, &rectDst);
 	c2dSetDstRectangle(fPtr->gpuContext, &rectDst);
 	c2dSetSrcRectangle(fPtr->gpuContext, &rectSrc);
 
