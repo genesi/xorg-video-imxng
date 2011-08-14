@@ -2715,7 +2715,7 @@ IMXEXAPrepareComposite(
 		c2dSetBlendMode(fPtr->gpuContext, C2D_ALPHA_BLEND_SRCOVER);
 		break;
 	case PictOpAdd:
-		c2dSetBlendMode(fPtr->gpuContext, C2D_ALPHA_BLEND_ADD);
+		c2dSetBlendMode(fPtr->gpuContext, C2D_ALPHA_BLEND_ADDITIVE);
 		break;
 	default:
 		return FALSE;
