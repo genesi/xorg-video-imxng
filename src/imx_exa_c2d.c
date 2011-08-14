@@ -1859,7 +1859,6 @@ IMXEXASolid(
 		.height = y2 - y1
 	};
 
-	c2dSetDstClipRect(fPtr->gpuContext, &rect);
 	c2dSetDstRectangle(fPtr->gpuContext, &rect);
 
 	const C2D_STATUS r = c2dDrawRect(fPtr->gpuContext, C2D_PARAM_FILL_BIT);
@@ -1869,8 +1868,6 @@ IMXEXASolid(
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 			"IMXEXASolid failed to perform GPU draw (code: 0x%08x)\n", r);
 	}
-
-	c2dSetDstClipRect(fPtr->gpuContext, NULL);
 
 #if IMX_EXA_DEBUG_INSTRUMENT_SYNCS
 
@@ -2052,7 +2049,6 @@ IMXEXACopy(
 		.height = height
 	};
 
-	c2dSetDstClipRect(fPtr->gpuContext, &rectDst);
 	c2dSetDstRectangle(fPtr->gpuContext, &rectDst);
 	c2dSetSrcRectangle(fPtr->gpuContext, &rectSrc);
 
@@ -2063,8 +2059,6 @@ IMXEXACopy(
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 			"IMXEXACopy failed to perform GPU draw (code: 0x%08x)\n", r);
 	}
-
-	c2dSetDstClipRect(fPtr->gpuContext, NULL);
 
 #if IMX_EXA_DEBUG_INSTRUMENT_SYNCS
 
@@ -2792,7 +2786,6 @@ IMXEXAComposite(
 		.height = height
 	};
 
-	c2dSetDstClipRect(fPtr->gpuContext, &rectDst);
 	c2dSetDstRectangle(fPtr->gpuContext, &rectDst);
 	c2dSetSrcRectangle(fPtr->gpuContext, &rectSrc);
 
@@ -2809,8 +2802,6 @@ IMXEXAComposite(
 			"IMXEXAComposite failed to perform GPU draw (code: 0x%08x) - %s\n",
 			r, (fPtr->composRepeat ? "pattern fill" : "blit"));
 	}
-
-	c2dSetDstClipRect(fPtr->gpuContext, NULL);
 
 #if IMX_EXA_DEBUG_INSTRUMENT_SYNCS
 
