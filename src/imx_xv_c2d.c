@@ -23,11 +23,6 @@
  * SOFTWARE.
  */
 
-#define IMXXV_VSYNC_ENABLE		0	/* flag: wait for vsync before showing a frame */
-#define IMXXV_VSYNC_NUM_RETRIES	0	/* max num of vsync retries due to syscall interrupts */
-#define IMXXV_VSYNC_DEBUG		0	/* flag: report wait-for-vsync ioctl errors */
-#define IMXXV_SURF_ALLOC_DEBUG	1
-
 #include <xf86.h>
 #include <xf86xv.h>
 #include <X11/extensions/Xv.h>
@@ -50,6 +45,8 @@
 
 #include "imx_type.h"
 #include "imx_colorspace.h"
+
+#define IMXXV_SURF_ALLOC_DEBUG	(1 && IMX_DEBUG_MASTER)
 
 #ifndef FOURCC_YVYU
 #define FOURCC_YVYU 0x55595659 /* 'YVYU' in little-endian */
@@ -284,37 +281,6 @@ imxxv_string_from_unalloc_c2d_surface(
 
 	return buf;
 }
-
-#if IMXXV_VSYNC_ENABLE
-
-static inline void
-imxxv_wait_for_vsync(
-	ScrnInfoPtr pScrn)
-{
-	const int fd = fbdevHWGetFD(pScrn);
-
-	int res, count = 0;
-
-	/* Waiting for vsync is an interruptable syscall, we need to persist. */
-	do {
-		res = ioctl(fd, MXCFB_WAIT_FOR_VSYNC, 0);
-		++count;
-	} while (-1 == res && EINTR == errno && count < IMXXV_VSYNC_NUM_RETRIES + 1);
-
-#if IMXXV_VSYNC_DEBUG
-
-	if (-1 == res)
-	{
-		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			"IMXXVPutImage failed at wait_for_vsync ioctl (errno: %s, num tries: %d)\n",
-			strerror(errno), count);
-	}
-
-#endif /* IMXXV_VSYNC_DEBUG */
-
-}
-
-#endif /* IMXXV_VSYNC_ENABLE */
 
 static inline int
 imxxv_port_idx_from_cookie(
@@ -936,6 +902,10 @@ IMXXVPutImage(
 		else
 			c2dSetDstSurface(imxPtr->xvGpuContext, surfDst);
 
+#else /* IMXXV_DBLFB_ENABLE */
+
+		c2dSetDstSurface(imxPtr->xvGpuContext, surfDst);
+
 #endif /* IMXXV_DBLFB_ENABLE */
 
 		if (!full_screen) {
@@ -952,13 +922,6 @@ IMXXVPutImage(
 		c2dSetSrcRectangle(imxPtr->xvGpuContext, &rectSrc);
 		c2dSetDstRectangle(imxPtr->xvGpuContext, &rectDst);
 	}
-
-#if IMXXV_VSYNC_ENABLE
-
-	/* Wait for vsync to avoid frame tearing. */
-	imxxv_wait_for_vsync(pScrn);
-
-#endif /* IMXXV_VSYNC_ENABLE */
 
 	int num_box = RegionNumRects(clipBoxes);
 	BoxPtr box = RegionRects(clipBoxes);
@@ -1072,7 +1035,7 @@ IMXXVPutImage(
 	if (!full_screen)
 		DamageDamageRegion(pDraw, clipBoxes);
 
-#else
+#else /* IMXXV_DBLFB_ENABLE */
 
 	c2dFlush(imxPtr->xvGpuContext);
 
