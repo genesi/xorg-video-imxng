@@ -644,7 +644,20 @@ imxexa_gpu_context_release(
 			"Unable to sync GPU (code: 0x%08x)\n", r);
 	}
 
-	/* Dispose of the screen surface. */
+	/* Dispose of screen's secondary surface. */
+	if (NULL != fPtr->doubleSurf) {
+
+		r = c2dSurfFree(fPtr->gpuContext, fPtr->doubleSurf);
+		fPtr->doubleSurf = NULL;
+
+		if (C2D_STATUS_OK != r) {
+
+			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+				"Unable to free screen's secondary surface (code: 0x%08x)\n", r);
+		}
+	}
+
+	/* Dispose of screen's primary surface. */
 	if (NULL != fPtr->screenSurf) {
 
 		r = c2dSurfFree(fPtr->gpuContext, fPtr->screenSurf);
@@ -652,8 +665,8 @@ imxexa_gpu_context_release(
 
 		if (C2D_STATUS_OK != r) {
 
-			xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
-				"Unable to free screen surface (code: 0x%08x)\n", r);
+			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+				"Unable to free screen's primary surface (code: 0x%08x)\n", r);
 		}
 	}
 
@@ -694,17 +707,17 @@ imxexa_gpu_context_acquire(
 	if (NULL != fPtr->gpuContext)
 		return TRUE;
 
-	C2D_COLORFORMAT fmt;
+	C2D_COLORFORMAT format;
 
 	/* Is screen's bitsPerPixel supported in surfaces? */
-	if (!imxexa_surf_format_from_bpp(imxPtr->backend, pScrn->bitsPerPixel, &fmt)) {
+	if (!imxexa_surf_format_from_bpp(imxPtr->backend, pScrn->bitsPerPixel, &format)) {
 
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 			"Screen bitsPerPixel not supported by GPU\n");
 		return FALSE;
 	}
 
-	/* Get context to access the GPU. */
+	/* Create GPU context. */
 	C2D_STATUS r = c2dCreateContext(&fPtr->gpuContext);
 
 	if (C2D_STATUS_OK != r) {
@@ -714,7 +727,7 @@ imxexa_gpu_context_acquire(
 		return FALSE;
 	}
 
-	/* Allocate first surface for the screen. */
+	/* Create screen surface(s). */
 	const int fd = fbdevHWGetFD(pScrn);
 
 	struct fb_fix_screeninfo fixinfo;
@@ -723,6 +736,8 @@ imxexa_gpu_context_acquire(
 	ioctl(fd, FBIOGET_FSCREENINFO, &fixinfo);
 	ioctl(fd, FBIOGET_VSCREENINFO, &varinfo);
 
+	Bool update_virtual_fb = FALSE;
+
 	/* For Z430 backend make sure screen stride is multiple of 32 pixels. */
 	if (IMXEXA_BACKEND_Z430 == imxPtr->backend &&
 		varinfo.xres_virtual & 0x1f) {
@@ -730,21 +745,38 @@ imxexa_gpu_context_acquire(
 		varinfo.xres_virtual = (varinfo.xres_virtual + 0x1f) & ~0x1f;
 		varinfo.xoffset = 0;
 
-		if (-1 == ioctl(fd, FBIOPUT_VSCREENINFO, &varinfo)) {
+		update_virtual_fb = TRUE;
+	}
 
-			c2dDestroyContext(fPtr->gpuContext);
-			fPtr->gpuContext = NULL;
+#if IMXXV_DBLFB_ENABLE
 
-			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-				"Attempt to correct screen stride failed at put_vscreeninfo ioctl (errno: %s)\n",
-				strerror(errno));
+	/* Arrange double buffering for full-screen Xv; currently Xv adaptor is Z160-only. */
+	if (IMXEXA_BACKEND_Z160 == imxPtr->backend &&
+		varinfo.yres_virtual < varinfo.yres * 2) {
 
-			return FALSE;
-		}
+		varinfo.yres_virtual = varinfo.yres * 2;
+		varinfo.yoffset = 0;
+
+		update_virtual_fb = TRUE;
+	}
+
+#endif /* IMXXV_DBLFB_ENABLE */
+
+	if (update_virtual_fb &&
+		-1 == ioctl(fd, FBIOPUT_VSCREENINFO, &varinfo)) {
+
+		c2dDestroyContext(fPtr->gpuContext);
+		fPtr->gpuContext = NULL;
+
+		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+			"Attempt to correct virtual framebuffer failed at put_vscreeninfo ioctl (errno: %s)\n",
+			strerror(errno));
+
+		return FALSE;
 	}
 
 	/* At the early stages of driver init our ScrnInfoPtr does not have a valid ScreenPtr. */
-	fPtr->screenSurfDef.format = fmt;
+	fPtr->screenSurfDef.format = format;
 	fPtr->screenSurfDef.width  = varinfo.xres;
 	fPtr->screenSurfDef.height = varinfo.yres;
 	fPtr->screenSurfDef.stride = varinfo.xres_virtual * varinfo.bits_per_pixel / 8;
@@ -760,11 +792,36 @@ imxexa_gpu_context_acquire(
 		fPtr->gpuContext = NULL;
 
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			"Unable to allocate surface for screen (code: 0x%08x)\n", r);
+			"Unable to allocate screen's primary surface (code: 0x%08x)\n", r);
 
 		return FALSE;
 	}
 
+#if IMXXV_DBLFB_ENABLE
+
+	C2D_SURFACE_DEF surfDef;
+	memcpy(&surfDef, &fPtr->screenSurfDef, sizeof(surfDef));
+
+	surfDef.buffer = (uint8_t *) fixinfo.smem_start + varinfo.yres * surfDef.stride;
+	surfDef.host   = NULL; /* We don't intend to ever lock this surface. */
+	surfDef.flags  = C2D_SURFACE_NO_BUFFER_ALLOC;
+
+	r = c2dSurfAlloc(fPtr->gpuContext, &fPtr->doubleSurf, &surfDef);
+
+	if (C2D_STATUS_OK != r) {
+
+		c2dDestroyContext(fPtr->gpuContext);
+		fPtr->gpuContext = NULL;
+
+		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+			"Unable to allocate screen's secondary surface (code: 0x%08x)\n", r);
+
+		return FALSE;
+	}
+
+#endif /* IMXXV_DBLFB_ENABLE */
+
+	/* GPU context created, set it up to defaults. */
 	imxexa_setup_context_defaults(fPtr->gpuContext);
 
 	fPtr->gpuSynced = FALSE;
@@ -908,6 +965,28 @@ imxexa_evict_pixmap(
 	IMXEXAPtr fPtr,
 	IMXEXAPixmapPtr fPixmapPtr);
 
+C2D_STATUS
+imxexa_alloc_c2d_surface(
+	IMXEXAPtr fPtr,
+	C2D_SURFACE_DEF* surfDef,
+	C2D_SURFACE* surf)
+{
+	C2D_STATUS r = c2dSurfAlloc(fPtr->gpuContext, surf, surfDef);
+
+	/* In case of failure due to running out of memory, start evicting from the top eviction candidate. */
+	IMXEXAPixmapPtr p = fPtr->pFirstEvictionCandidate;
+
+	for (; NULL != p && C2D_STATUS_OUT_OF_MEMORY == r; p = p->prev) {
+
+		if (!imxexa_evict_pixmap(fPtr, p))
+			continue;
+
+		r = c2dSurfAlloc(fPtr->gpuContext, surf, surfDef);
+	}
+
+	return r;
+}
+
 static inline Bool
 imxexa_unlock_surface(
 	IMXEXAPtr fPtr,
@@ -919,25 +998,14 @@ imxexa_unlock_surface(
 	/* Is surface currently evicted? Reinstate it first. */
 	if (PIXMAP_STAMP_EVICTED == fPixmapPtr->stamp) {
 
-		const C2D_COLORFORMAT original_format = fPixmapPtr->surfDef.format;
+		const C2D_COLORFORMAT format = fPixmapPtr->surfDef.format;
 		memset(&fPixmapPtr->surfDef, 0, sizeof(fPixmapPtr->surfDef));
 
-		fPixmapPtr->surfDef.format = original_format;
+		fPixmapPtr->surfDef.format = format;
         fPixmapPtr->surfDef.width = fPixmapPtr->width;
         fPixmapPtr->surfDef.height = fPixmapPtr->height;
 
-		C2D_STATUS r = c2dSurfAlloc(fPtr->gpuContext, &fPixmapPtr->surf, &fPixmapPtr->surfDef);
-
-		/* In case of failure due to running out of memory, start evicting from the top eviction candidate. */
-		IMXEXAPixmapPtr p = fPtr->pFirstEvictionCandidate;
-
-		for (; NULL != p && C2D_STATUS_OUT_OF_MEMORY == r; p = p->prev) {
-
-			if (!imxexa_evict_pixmap(fPtr, p))
-				continue;
-
-			r = c2dSurfAlloc(fPtr->gpuContext, &fPixmapPtr->surf, &fPixmapPtr->surfDef);
-		}
+		const C2D_STATUS r = imxexa_alloc_c2d_surface(fPtr, &fPixmapPtr->surfDef, &fPixmapPtr->surf);
 
 		if (C2D_STATUS_OK == r) {
 
@@ -1226,18 +1294,7 @@ IMXEXACreatePixmap2(
 		fPixmapPtr->surfDef.width = width;
 		fPixmapPtr->surfDef.height = height;
 
-		C2D_STATUS r = c2dSurfAlloc(fPtr->gpuContext, &fPixmapPtr->surf, &fPixmapPtr->surfDef);
-
-		/* In case of failure due to running out of memory, start evicting from the top eviction candidate. */
-		IMXEXAPixmapPtr p = fPtr->pFirstEvictionCandidate;
-
-		for (; NULL != p && C2D_STATUS_OUT_OF_MEMORY == r; p = p->prev) {
-
-			if (!imxexa_evict_pixmap(fPtr, p))
-				continue;
-
-			r = c2dSurfAlloc(fPtr->gpuContext, &fPixmapPtr->surf, &fPixmapPtr->surfDef);
-		}
+		const C2D_STATUS r = imxexa_alloc_c2d_surface(fPtr, &fPixmapPtr->surfDef, &fPixmapPtr->surf);
 
 		if (C2D_STATUS_OK == r) {
 

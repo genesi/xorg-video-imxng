@@ -303,14 +303,16 @@ imxxv_delete_port_surface(
 	IMXPtr imxPtr,
 	int port_idx)
 {
-	c2dSurfFree(imxPtr->xvGpuContext, imxPtr->xvPort[port_idx].surf);
+	IMXEXAPtr imxexaPtr = IMXEXAPTR(imxPtr);
+
+	c2dSurfFree(imxexaPtr->gpuContext, imxPtr->xvPort[port_idx].surf);
 
 	imxPtr->xvPort[port_idx].surf = NULL;
 	memset(&imxPtr->xvPort[port_idx].surfDef, 0, sizeof(imxPtr->xvPort[port_idx].surfDef));
 
 	if (NULL != imxPtr->xvPort[port_idx].surfAux) {
 
-		c2dSurfFree(imxPtr->xvGpuContext, imxPtr->xvPort[port_idx].surfAux);
+		c2dSurfFree(imxexaPtr->gpuContext, imxPtr->xvPort[port_idx].surfAux);
 		imxPtr->xvPort[port_idx].surfAux = NULL;
 	}
 
@@ -377,10 +379,11 @@ IMXXVStopVideo(
 	Bool cleanup)
 {
 	IMXPtr imxPtr = IMXPTR(pScrn);
+	IMXEXAPtr imxexaPtr = IMXEXAPTR(imxPtr);
 
 	const int port_idx = imxxv_port_idx_from_cookie(imxPtr, data);
 
-	if (cleanup && NULL != imxPtr->xvGpuContext) {
+	if (cleanup && NULL != imxexaPtr->gpuContext) {
 
 		if (NULL != imxPtr->xvPort[port_idx].surf) {
 
@@ -499,6 +502,12 @@ yuv420_to_yuv422(
 	int cw,
 	int dw);
 
+extern C2D_STATUS
+imxexa_alloc_c2d_surface(
+	IMXEXAPtr imxexaPtr,
+	C2D_SURFACE_DEF* surfDef,
+	C2D_SURFACE* surf);
+
 static int
 IMXXVPutImage(
 	ScrnInfoPtr pScrn,
@@ -528,8 +537,9 @@ IMXXVPutImage(
 	}
 
 	IMXPtr imxPtr = IMXPTR(pScrn);
+	IMXEXAPtr imxexaPtr = IMXEXAPTR(imxPtr);
 
-	if (NULL == imxPtr->xvGpuContext) {
+	if (NULL == imxexaPtr->gpuContext) {
 
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 			"IMXXVPutImage called with no GPU context\n");
@@ -537,20 +547,20 @@ IMXXVPutImage(
 		return BadMatch;
 	}
 
-	C2D_COLORFORMAT fmt;
+	C2D_COLORFORMAT format;
 	const int bytespp = 2;
 
 	switch (image) {
 	case FOURCC_YVYU:
-		fmt = C2D_COLOR_YVYU;
+		format = C2D_COLOR_YVYU;
 		break;
 	case FOURCC_UYVY:
-		fmt = C2D_COLOR_UYVY;
+		format = C2D_COLOR_UYVY;
 		break;
 	case FOURCC_YV12: /* Through a transform. */
 	case FOURCC_I420: /* Through a transform. */
 	case FOURCC_YUY2:
-		fmt = C2D_COLOR_YUY2;
+		format = C2D_COLOR_YUY2;
 		break;
 	default:
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
@@ -561,7 +571,7 @@ IMXXVPutImage(
 	const int port_idx = imxxv_port_idx_from_cookie(imxPtr, data);
 
 	if (NULL != imxPtr->xvPort[port_idx].surf &&
-		(fmt != imxPtr->xvPort[port_idx].surfDef.format ||
+		(format != imxPtr->xvPort[port_idx].surfDef.format ||
 		 width > imxPtr->xvPort[port_idx].surfDef.width ||
 		 height > imxPtr->xvPort[port_idx].surfDef.height)) {
 
@@ -570,7 +580,7 @@ IMXXVPutImage(
 
 	if (NULL == imxPtr->xvPort[port_idx].surf) {
 
-		imxPtr->xvPort[port_idx].surfDef.format	= fmt;
+		imxPtr->xvPort[port_idx].surfDef.format	= format;
 		imxPtr->xvPort[port_idx].surfDef.width	= width;
 		imxPtr->xvPort[port_idx].surfDef.height	= height;
 
@@ -583,7 +593,7 @@ IMXXVPutImage(
 #endif /* IMXXV_SURF_ALLOC_DEBUG */
 
 		C2D_STATUS r;
-		r = c2dSurfAlloc(imxPtr->xvGpuContext, &imxPtr->xvPort[port_idx].surf, &imxPtr->xvPort[port_idx].surfDef);
+		r = imxexa_alloc_c2d_surface(imxexaPtr, &imxPtr->xvPort[port_idx].surfDef, &imxPtr->xvPort[port_idx].surf);
 
 		if (C2D_STATUS_OK != r) {
 
@@ -602,7 +612,7 @@ IMXXVPutImage(
 #endif /* IMXXV_SURF_ALLOC_DEBUG */
 
 		/* Wipe out the new surface to YUY2 black. */
-		imxxv_fill_surface(imxPtr->xvGpuContext, imxPtr->xvPort[port_idx].surf, 0x800000U);
+		imxxv_fill_surface(imxexaPtr->gpuContext, imxPtr->xvPort[port_idx].surf, 0x800000U);
 
 		if (width > IMXXV_MAX_BLIT_COORD) {
 
@@ -611,10 +621,10 @@ IMXXVPutImage(
 
 			surfDef.width  = width - IMXXV_MAX_BLIT_COORD;
 			surfDef.buffer = (char *) surfDef.buffer + IMXXV_MAX_BLIT_COORD * bytespp;
-			surfDef.host   = (char *) surfDef.host + IMXXV_MAX_BLIT_COORD * bytespp;
+			surfDef.host   = NULL; /* We don't intend to ever lock this surface. */
 			surfDef.flags  = C2D_SURFACE_NO_BUFFER_ALLOC;
 
-			r = c2dSurfAlloc(imxPtr->xvGpuContext, &imxPtr->xvPort[port_idx].surfAux, &surfDef);
+			r = c2dSurfAlloc(imxexaPtr->gpuContext, &imxPtr->xvPort[port_idx].surfAux, &surfDef);
 
 			if (C2D_STATUS_OK != r) {
 
@@ -679,7 +689,7 @@ IMXXVPutImage(
 	C2D_STATUS r;
 
 	/* Access-lock the Xv GPU surface. */
-	r = c2dSurfLock(imxPtr->xvGpuContext, imxPtr->xvPort[port_idx].surf, (void**) &bits);
+	r = c2dSurfLock(imxexaPtr->gpuContext, imxPtr->xvPort[port_idx].surf, (void**) &bits);
 
 	if (C2D_STATUS_OK != r) {
 
@@ -774,24 +784,24 @@ IMXXVPutImage(
 	}
 
 	/* Surface updated, unlock it. */
-	c2dSurfUnlock(imxPtr->xvGpuContext, imxPtr->xvPort[port_idx].surf);
+	c2dSurfUnlock(imxexaPtr->gpuContext, imxPtr->xvPort[port_idx].surf);
 
 	/* Set various static draw parameters. */
-	c2dSetBrushSurface(imxPtr->xvGpuContext, NULL, NULL);
-	c2dSetMaskSurface(imxPtr->xvGpuContext, NULL, NULL);
+	c2dSetBrushSurface(imxexaPtr->gpuContext, NULL, NULL);
+	c2dSetMaskSurface(imxexaPtr->gpuContext, NULL, NULL);
 
-	c2dSetBlendMode(imxPtr->xvGpuContext, C2D_ALPHA_BLEND_NONE);
+	c2dSetBlendMode(imxexaPtr->gpuContext, C2D_ALPHA_BLEND_NONE);
 
 	const Bool dither_blit = 16 == pScrn->bitsPerPixel;
 
 	if (dither_blit)
-		c2dSetDither(imxPtr->xvGpuContext, 1);
+		c2dSetDither(imxexaPtr->gpuContext, 1);
 
 	const Bool stretch_blit = imxPtr->use_bilinear_filtering ?
 		(src_w != drw_w || src_h != drw_h) : FALSE;
 
 	if (stretch_blit) {
-		c2dSetStretchMode(imxPtr->xvGpuContext, C2D_STRETCH_BILINEAR_SAMPLING);
+		c2dSetStretchMode(imxexaPtr->gpuContext, C2D_STRETCH_BILINEAR_SAMPLING);
 		/* c2d_z160: the above seems to set the _general_ sampling, not just at stretching. */
 	}
 
@@ -818,7 +828,7 @@ IMXXVPutImage(
 		pDraw->pScreen->height == pDraw->height;
 
 	PixmapPtr pxDst = NULL;
-	C2D_SURFACE surfDst = imxPtr->xvScreenSurf;
+	C2D_SURFACE surfDst = imxexaPtr->screenSurf;
 
 	if (!full_screen) {
 
@@ -898,13 +908,13 @@ IMXXVPutImage(
 		imxPtr->xvBufferTracker ^= 1;
 
 		if (full_screen && imxPtr->xvBufferTracker)
-			c2dSetDstSurface(imxPtr->xvGpuContext, imxPtr->xvScreenSurf2);
+			c2dSetDstSurface(imxexaPtr->gpuContext, imxexaPtr->doubleSurf);
 		else
-			c2dSetDstSurface(imxPtr->xvGpuContext, surfDst);
+			c2dSetDstSurface(imxexaPtr->gpuContext, surfDst);
 
 #else /* IMXXV_DBLFB_ENABLE */
 
-		c2dSetDstSurface(imxPtr->xvGpuContext, surfDst);
+		c2dSetDstSurface(imxexaPtr->gpuContext, surfDst);
 
 #endif /* IMXXV_DBLFB_ENABLE */
 
@@ -916,11 +926,11 @@ IMXXVPutImage(
 	}
 	else {
 
-		c2dSetDstSurface(imxPtr->xvGpuContext, surfDst);
-		c2dSetSrcSurface(imxPtr->xvGpuContext, imxPtr->xvPort[port_idx].surf);
+		c2dSetDstSurface(imxexaPtr->gpuContext, surfDst);
+		c2dSetSrcSurface(imxexaPtr->gpuContext, imxPtr->xvPort[port_idx].surf);
 
-		c2dSetSrcRectangle(imxPtr->xvGpuContext, &rectSrc);
-		c2dSetDstRectangle(imxPtr->xvGpuContext, &rectDst);
+		c2dSetSrcRectangle(imxexaPtr->gpuContext, &rectSrc);
+		c2dSetDstRectangle(imxexaPtr->gpuContext, &rectDst);
 	}
 
 	int num_box = RegionNumRects(clipBoxes);
@@ -941,7 +951,7 @@ IMXXVPutImage(
 			rectClip.y += pxDst->drawable.y - pxDst->screen_y;
 		}
 
-		c2dSetDstClipRect(imxPtr->xvGpuContext, &rectClip);
+		c2dSetDstClipRect(imxexaPtr->gpuContext, &rectClip);
 
 		if (split_blit) {
 			
@@ -951,12 +961,12 @@ IMXXVPutImage(
 				rectClip.x < rectDst.x + rectDst.width &&
 				rectClip.y < rectDst.y + rectDst.height) {
 
-				c2dSetSrcSurface(imxPtr->xvGpuContext, imxPtr->xvPort[port_idx].surf);
+				c2dSetSrcSurface(imxexaPtr->gpuContext, imxPtr->xvPort[port_idx].surf);
 
-				c2dSetSrcRectangle(imxPtr->xvGpuContext, &rectSrc);
-				c2dSetDstRectangle(imxPtr->xvGpuContext, &rectDst);
+				c2dSetSrcRectangle(imxexaPtr->gpuContext, &rectSrc);
+				c2dSetDstRectangle(imxexaPtr->gpuContext, &rectDst);
 
-				r = c2dDrawBlit(imxPtr->xvGpuContext);
+				r = c2dDrawBlit(imxexaPtr->gpuContext);
 
 				if (C2D_STATUS_OK != r)
 					break;
@@ -970,26 +980,26 @@ IMXXVPutImage(
 				continue;
 			}
 
-			c2dSetSrcSurface(imxPtr->xvGpuContext, imxPtr->xvPort[port_idx].surfAux);
+			c2dSetSrcSurface(imxexaPtr->gpuContext, imxPtr->xvPort[port_idx].surfAux);
 
-			c2dSetSrcRectangle(imxPtr->xvGpuContext, &rectSrcAux);
-			c2dSetDstRectangle(imxPtr->xvGpuContext, &rectDstAux);
+			c2dSetSrcRectangle(imxexaPtr->gpuContext, &rectSrcAux);
+			c2dSetDstRectangle(imxexaPtr->gpuContext, &rectDstAux);
 		}
 
-		r = c2dDrawBlit(imxPtr->xvGpuContext);
+		r = c2dDrawBlit(imxexaPtr->gpuContext);
 
 		if (C2D_STATUS_OK != r)
 			break;
 	}
 
 	/* Reset clipping and various static draw parameters. */
-	c2dSetDstClipRect(imxPtr->xvGpuContext, NULL);
+	c2dSetDstClipRect(imxexaPtr->gpuContext, NULL);
 
 	if (dither_blit)
-		c2dSetDither(imxPtr->xvGpuContext, 0);
+		c2dSetDither(imxexaPtr->gpuContext, 0);
 
 	if (stretch_blit) {
-		c2dSetStretchMode(imxPtr->xvGpuContext, C2D_STRETCH_POINT_SAMPLING);
+		c2dSetStretchMode(imxexaPtr->gpuContext, C2D_STRETCH_POINT_SAMPLING);
 		/* c2d_z160: the above seems to set the _general_ sampling, not just at stretching. */
 	}
 
@@ -1009,7 +1019,7 @@ IMXXVPutImage(
 
 	if (full_screen && split_blit) {
 
-		c2dFinish(imxPtr->xvGpuContext);
+		c2dFinish(imxexaPtr->gpuContext);
 
 		const int fd = fbdevHWGetFD(pScrn);
 
@@ -1030,7 +1040,7 @@ IMXXVPutImage(
 		}
 	}
 	else
-		c2dFlush(imxPtr->xvGpuContext);
+		c2dFlush(imxexaPtr->gpuContext);
 
 	if (!full_screen)
 		DamageDamageRegion(pDraw, clipBoxes);
@@ -1165,14 +1175,9 @@ IMXXVInitAdaptorC2D(
 	XF86VideoAdaptorPtr **pppAdaptor)
 {
 	IMXPtr imxPtr = IMXPTR(pScrn);
-	IMXEXAPtr fPtr = IMXEXAPTR(imxPtr);
+	IMXEXAPtr imxexaPtr = IMXEXAPTR(imxPtr);
 
-	if (IMXEXA_BACKEND_Z160 == imxPtr->backend) {
-
-		imxPtr->xvGpuContext = fPtr->gpuContext;
-		imxPtr->xvScreenSurf = fPtr->screenSurf;
-	}
-	else {
+	if (IMXEXA_BACKEND_Z160 != imxPtr->backend) {
 
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 			"XV adaptor does not currently support the active EXA backend.\n");
@@ -1181,52 +1186,8 @@ IMXXVInitAdaptorC2D(
 
 #if IMXXV_DBLFB_ENABLE
 
-	const int fd = fbdevHWGetFD(pScrn);
-
-	struct fb_fix_screeninfo fixinfo;
-	struct fb_var_screeninfo varinfo;
-
-	ioctl(fd, FBIOGET_FSCREENINFO, &fixinfo);
-	ioctl(fd, FBIOGET_VSCREENINFO, &varinfo);
-
-	if (varinfo.yres_virtual < varinfo.yres * 2) {
-
-		varinfo.yres_virtual = varinfo.yres * 2;
-		varinfo.yoffset = 0;
-
-		if (-1 == ioctl(fd, FBIOPUT_VSCREENINFO, &varinfo)) {
-
-			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-				"IMXXVInitAdaptor failed at put_vscreeninfo ioctl (errno: %s)\n",
-				strerror(errno));
-
-			return 0;
-		}
-	}
-
-	C2D_SURFACE_DEF surfDef;
-	memset(&surfDef, 0, sizeof(surfDef));
-
-	surfDef.format = fPtr->screenSurfDef.format;
-	surfDef.width  = varinfo.xres;
-	surfDef.height = varinfo.yres;
-	surfDef.stride = varinfo.xres_virtual * varinfo.bits_per_pixel / 8;
-	surfDef.buffer = (uint8_t *) fixinfo.smem_start + varinfo.yres * surfDef.stride;
-	surfDef.host   = NULL; /* We don't intend to ever lock this surface. */
-	surfDef.flags  = C2D_SURFACE_NO_BUFFER_ALLOC;
-
-	C2D_STATUS r = c2dSurfAlloc(imxPtr->xvGpuContext, &imxPtr->xvScreenSurf2, &surfDef);
-
-	if (C2D_STATUS_OK != r) {
-
-		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			"IMXXVInitAdaptor failed to allocate surface for screen (code: 0x%08x)\n", r);
-
-		return 0;
-	}
-
-	/* Wipe out the new surface to RGB black. */
-	imxxv_fill_surface(imxPtr->xvGpuContext, imxPtr->xvScreenSurf2, 0U);
+	/* Wipe out screen's seconday surface to RGB black. */
+	imxxv_fill_surface(imxexaPtr->gpuContext, imxexaPtr->doubleSurf, 0U);
 
 #endif /* IMXXV_DBLFB_ENABLE */
 

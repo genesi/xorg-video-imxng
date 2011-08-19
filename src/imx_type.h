@@ -107,10 +107,7 @@ typedef struct {
 
 	/* XV acceleration */
 	DevUnion						xvPortPrivate[IMXXV_NUM_PORTS];
-	C2D_CONTEXT						xvGpuContext;
-	C2D_SURFACE						xvScreenSurf;
 #if IMXXV_DBLFB_ENABLE
-	C2D_SURFACE						xvScreenSurf2;
 	unsigned						xvBufferTracker;
 #endif
 	XVPortRec						xvPort[IMXXV_NUM_PORTS];
@@ -136,6 +133,9 @@ typedef struct _IMXEXARec {
 	/* GPU surface for the screen */
 	C2D_SURFACE_DEF	screenSurfDef;
 	C2D_SURFACE		screenSurf;
+#if IMXXV_DBLFB_ENABLE
+	C2D_SURFACE		doubleSurf;
+#endif
 
 	/* Parameters originating from PrepareComposite and going into Composite */
 	Bool			composRepeat;
