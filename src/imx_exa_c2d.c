@@ -2543,6 +2543,10 @@ IMXEXACheckComposite(
 		if (IMXEXA_BACKEND_Z160 == imxPtr->backend)
 			success = TRUE;
 		break;
+	case PictOpIn:
+		if (IMXEXA_BACKEND_Z160 == imxPtr->backend)
+			success = TRUE;
+		break;
 /*	case PictOpClear:
 	case PictOpSrc:
 	case PictOpDst:
@@ -2739,6 +2743,23 @@ IMXEXAPrepareComposite(
 		return FALSE;
 	}
 
+	switch (op) {
+	case PictOpSrc:
+		c2dSetBlendMode(fPtr->gpuContext, C2D_ALPHA_BLEND_NONE);
+		break;
+	case PictOpOver:
+		c2dSetBlendMode(fPtr->gpuContext, C2D_ALPHA_BLEND_SRCOVER);
+		break;
+	case PictOpAdd:
+		c2dSetBlendMode(fPtr->gpuContext, C2D_ALPHA_BLEND_ADDITIVE);
+		break;
+	case PictOpIn:
+		c2dSetBlendMode(fPtr->gpuContext, C2D_ALPHA_BLEND_SRCIN);
+		break;
+	default:
+		return FALSE;
+	}
+
 	fPtr->composConvert = pPictureDst->format != pPictureSrc->format;
 
 	c2dSetDstSurface(fPtr->gpuContext, imxexa_get_preferred_surface(fPixmapDstPtr));
@@ -2757,26 +2778,10 @@ IMXEXAPrepareComposite(
 	}
 
 	/* Set up mask, but watch out for Z160 doing pattern fill - combining the two can produce hard lock-ups. */
-	if (NULL != pPixmapMask && !fPtr->composRepeat) {
+	if (NULL != pPixmapMask && !fPtr->composRepeat)
 		c2dSetMaskSurface(fPtr->gpuContext, imxexa_get_preferred_surface(fPixmapMskPtr), NULL);
-	}
-	else {
+	else
 		c2dSetMaskSurface(fPtr->gpuContext, NULL, NULL);
-	}
-
-	switch (op) {
-	case PictOpSrc:
-		c2dSetBlendMode(fPtr->gpuContext, C2D_ALPHA_BLEND_NONE);
-		break;
-	case PictOpOver:
-		c2dSetBlendMode(fPtr->gpuContext, C2D_ALPHA_BLEND_SRCOVER);
-		break;
-	case PictOpAdd:
-		c2dSetBlendMode(fPtr->gpuContext, C2D_ALPHA_BLEND_ADDITIVE);
-		break;
-	default:
-		return FALSE;
-	}
 
 	/* Mark pixmaps as used and update driver's heartbeat. */
 	imxexa_update_pixmap_on_use(fPtr, fPixmapDstPtr);
