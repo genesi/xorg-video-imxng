@@ -30,6 +30,7 @@
 #include <sys/ioctl.h>
 #include <linux/fb.h>
 #include <errno.h>
+#include <unistd.h>
 
 /* Preparation for the inclusion of c2d_api.h */
 #ifndef _LINUX
@@ -2998,7 +2999,7 @@ IMX_EXA_ScreenInit(int scrnIndex, ScreenPtr pScreen)
 	imxPtr->exaDriverPtr->memoryBase = imxPtr->fbstart;
 	imxPtr->exaDriverPtr->memorySize = fbdevHWGetVidmem(pScrn);
 	imxPtr->exaDriverPtr->offScreenBase = numScreenBytes;
-	imxPtr->exaDriverPtr->pixmapOffsetAlign = 4096; /* page boundary */
+	imxPtr->exaDriverPtr->pixmapOffsetAlign = getpagesize();
 	imxPtr->exaDriverPtr->pixmapPitchAlign = 32 * 4; /* 32 pixels by 32bpp max */
 	imxPtr->exaDriverPtr->maxPitchBytes = IMX_EXA_MAX_SURF_DIM * 4;
 	imxPtr->exaDriverPtr->maxX = IMX_EXA_MAX_SURF_DIM - 1;
