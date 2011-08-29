@@ -135,6 +135,7 @@ static SymTabRec IMXChipsets[] = {
 #define OPTION_STR_BACKEND		"Backend"
 #define OPTION_STR_COMPOSITING	"Compositing"
 #define OPTION_STR_XV_BILINEAR	"XvBilinear"
+#define OPTION_STR_XV_DOUBLEFB	"XvDoubleBuffering"
 #define OPTION_STR_DEBUG		"Debug"
 
 static const OptionInfoRec IMXOptions[] = {
@@ -144,6 +145,7 @@ static const OptionInfoRec IMXOptions[] = {
 	{ OPTION_BACKEND,		OPTION_STR_BACKEND,		OPTV_STRING,	{0},	FALSE },
 	{ OPTION_COMPOSITING,	OPTION_STR_COMPOSITING,	OPTV_BOOLEAN,	{0},	FALSE },
 	{ OPTION_XV_BILINEAR,	OPTION_STR_XV_BILINEAR,	OPTV_BOOLEAN,	{0},	FALSE },
+	{ OPTION_XV_DOUBLEFB,	OPTION_STR_XV_DOUBLEFB,	OPTV_BOOLEAN,	{0},	FALSE },
 	{ OPTION_DEBUG,			OPTION_STR_DEBUG,		OPTV_BOOLEAN,	{0},	FALSE },
 	{ -1,					NULL,					OPTV_NONE,		{0},	FALSE }
 };
@@ -507,6 +509,7 @@ IMXPreInit(ScrnInfoPtr pScrn, int flags)
 	}
 
 	fPtr->use_bilinear_filtering = xf86ReturnOptValBool(fPtr->options, OPTION_XV_BILINEAR, TRUE);
+	fPtr->use_double_buffering = xf86ReturnOptValBool(fPtr->options, OPTION_XV_DOUBLEFB, TRUE);
 
 	/* Register adaptors in the reverse order we want them enumerated. */
 	/* xserver/hw/xfree86/common/xf86xv.c:xf86XVListGenericAdaptors() lists them in reverse. */

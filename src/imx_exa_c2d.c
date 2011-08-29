@@ -737,7 +737,7 @@ imxexa_gpu_context_acquire(
 	ioctl(fd, FBIOGET_FSCREENINFO, &fixinfo);
 	ioctl(fd, FBIOGET_VSCREENINFO, &varinfo);
 
-	Bool update_virtual_fb = FALSE;
+	Bool adjust_virtual_fb = FALSE;
 
 	/* For Z430 backend make sure screen stride is multiple of 32 pixels. */
 	if (IMXEXA_BACKEND_Z430 == imxPtr->backend &&
@@ -746,31 +746,28 @@ imxexa_gpu_context_acquire(
 		varinfo.xres_virtual = (varinfo.xres_virtual + 0x1f) & ~0x1f;
 		varinfo.xoffset = 0;
 
-		update_virtual_fb = TRUE;
+		adjust_virtual_fb = TRUE;
 	}
 
-#if IMXXV_DBLFB_ENABLE
-
-	/* Arrange double buffering for full-screen Xv; currently Xv adaptor is Z160-only. */
-	if (IMXEXA_BACKEND_Z160 == imxPtr->backend &&
+	/* Arrange double buffering for fullscreen clients. */
+	/* Currently used only by XV adaptor which works only with Z160 backend. */
+	if (IMXEXA_BACKEND_Z160 == imxPtr->backend && imxPtr->use_double_buffering &&
 		varinfo.yres_virtual < varinfo.yres * 2) {
 
 		varinfo.yres_virtual = varinfo.yres * 2;
 		varinfo.yoffset = 0;
 
-		update_virtual_fb = TRUE;
+		adjust_virtual_fb = TRUE;
 	}
 
-#endif /* IMXXV_DBLFB_ENABLE */
-
-	if (update_virtual_fb &&
+	if (adjust_virtual_fb &&
 		-1 == ioctl(fd, FBIOPUT_VSCREENINFO, &varinfo)) {
 
 		c2dDestroyContext(fPtr->gpuContext);
 		fPtr->gpuContext = NULL;
 
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			"Attempt to correct virtual framebuffer failed at put_vscreeninfo ioctl (errno: %s)\n",
+			"Attempt to adjust virtual framebuffer failed at put_vscreeninfo ioctl (errno: %s)\n",
 			strerror(errno));
 
 		return FALSE;
@@ -798,29 +795,28 @@ imxexa_gpu_context_acquire(
 		return FALSE;
 	}
 
-#if IMXXV_DBLFB_ENABLE
+	if (IMXEXA_BACKEND_Z160 == imxPtr->backend && imxPtr->use_double_buffering) {
 
-	C2D_SURFACE_DEF surfDef;
-	memcpy(&surfDef, &fPtr->screenSurfDef, sizeof(surfDef));
+		C2D_SURFACE_DEF surfDef;
+		memcpy(&surfDef, &fPtr->screenSurfDef, sizeof(surfDef));
 
-	surfDef.buffer = (uint8_t *) fixinfo.smem_start + varinfo.yres * surfDef.stride;
-	surfDef.host   = NULL; /* We don't intend to ever lock this surface. */
-	surfDef.flags  = C2D_SURFACE_NO_BUFFER_ALLOC;
+		surfDef.buffer = (uint8_t *) fixinfo.smem_start + varinfo.yres * surfDef.stride;
+		surfDef.host   = NULL; /* Surface is not intend to be ever locked. */
+		surfDef.flags  = C2D_SURFACE_NO_BUFFER_ALLOC;
 
-	r = c2dSurfAlloc(fPtr->gpuContext, &fPtr->doubleSurf, &surfDef);
+		r = c2dSurfAlloc(fPtr->gpuContext, &fPtr->doubleSurf, &surfDef);
 
-	if (C2D_STATUS_OK != r) {
+		if (C2D_STATUS_OK != r) {
 
-		c2dDestroyContext(fPtr->gpuContext);
-		fPtr->gpuContext = NULL;
+			c2dDestroyContext(fPtr->gpuContext);
+			fPtr->gpuContext = NULL;
 
-		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			"Unable to allocate screen's secondary surface (code: 0x%08x)\n", r);
+			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+				"Unable to allocate screen's secondary surface (code: 0x%08x)\n", r);
 
-		return FALSE;
+			return FALSE;
+		}
 	}
-
-#endif /* IMXXV_DBLFB_ENABLE */
 
 	/* GPU context created, set it up to defaults. */
 	imxexa_setup_context_defaults(fPtr->gpuContext);

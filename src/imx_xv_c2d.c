@@ -389,30 +389,29 @@ IMXXVStopVideo(
 
 			imxxv_delete_port_surface(imxPtr, port_idx);
 
-#if IMXXV_DBLFB_ENABLE
+			if (imxPtr->use_double_buffering) {
 
-			/* Bring xorg's framebuffer to front. */
-			const int fd = fbdevHWGetFD(pScrn);
+				/* Bring xorg's framebuffer to front. */
+				const int fd = fbdevHWGetFD(pScrn);
 
-			struct fb_var_screeninfo varinfo;
+				struct fb_var_screeninfo varinfo;
 
-			if (-1 == ioctl(fd, FBIOGET_VSCREENINFO, &varinfo)) {
-				xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-					"IMXXVStopVideo failed at get_vscreeninfo ioctl (errno: %s)\n",
-					strerror(errno));
+				if (-1 == ioctl(fd, FBIOGET_VSCREENINFO, &varinfo)) {
+					xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+						"IMXXVStopVideo failed at get_vscreeninfo ioctl (errno: %s)\n",
+						strerror(errno));
+				}
+
+				varinfo.yoffset = 0;
+
+				if (-1 == ioctl(fd, FBIOPAN_DISPLAY, &varinfo)) {
+					xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+						"IMXXVStopVideo failed at pan_display ioctl (errno: %s)\n",
+						strerror(errno));
+				}
+
+				imxPtr->xvBufferTracker = 0;
 			}
-
-			varinfo.yoffset = 0;
-
-			if (-1 == ioctl(fd, FBIOPAN_DISPLAY, &varinfo)) {
-				xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-					"IMXXVStopVideo failed at pan_display ioctl (errno: %s)\n",
-					strerror(errno));
-			}
-
-			imxPtr->xvBufferTracker = 0;
-
-#endif /* IMXXV_DBLFB_ENABLE */
 
 			unsigned i;
 
@@ -903,20 +902,13 @@ IMXXVPutImage(
 
 		split_blit = TRUE;
 
-#if IMXXV_DBLFB_ENABLE
-
-		imxPtr->xvBufferTracker ^= 1;
+		if (imxPtr->use_double_buffering)
+			imxPtr->xvBufferTracker ^= 1;
 
 		if (full_screen && imxPtr->xvBufferTracker)
 			c2dSetDstSurface(imxexaPtr->gpuContext, imxexaPtr->doubleSurf);
 		else
 			c2dSetDstSurface(imxexaPtr->gpuContext, surfDst);
-
-#else /* IMXXV_DBLFB_ENABLE */
-
-		c2dSetDstSurface(imxexaPtr->gpuContext, surfDst);
-
-#endif /* IMXXV_DBLFB_ENABLE */
 
 		if (!full_screen) {
 
@@ -1015,9 +1007,7 @@ IMXXVPutImage(
 	/* Note: Using GPU flush effectively doubles the CPU load at presenting a frame, but the */
 	/* frame reaches the screen sooner, as long as the required CPU resource is available. */
 
-#if IMXXV_DBLFB_ENABLE
-
-	if (full_screen && split_blit) {
+	if (full_screen && split_blit && imxPtr->use_double_buffering) {
 
 		c2dFinish(imxexaPtr->gpuContext);
 
@@ -1044,15 +1034,6 @@ IMXXVPutImage(
 
 	if (!full_screen)
 		DamageDamageRegion(pDraw, clipBoxes);
-
-#else /* IMXXV_DBLFB_ENABLE */
-
-	c2dFlush(imxPtr->xvGpuContext);
-
-	if (!full_screen)
-		DamageDamageRegion(pDraw, clipBoxes);
-
-#endif /* IMXXV_DBLFB_ENABLE */
 
 	return Success;
 }
@@ -1184,12 +1165,9 @@ IMXXVInitAdaptorC2D(
 		return 0;
 	}
 
-#if IMXXV_DBLFB_ENABLE
-
 	/* Wipe out screen's seconday surface to RGB black. */
-	imxxv_fill_surface(imxexaPtr->gpuContext, imxexaPtr->doubleSurf, 0U);
-
-#endif /* IMXXV_DBLFB_ENABLE */
+	if (imxPtr->use_double_buffering)
+		imxxv_fill_surface(imxexaPtr->gpuContext, imxexaPtr->doubleSurf, 0U);
 
 	/* This early during driver init ScrnInfoPtr does not have a valid ScreenPtr yet. */
 	ScreenPtr pScreen = screenInfo.screens[pScrn->scrnIndex];

@@ -59,6 +59,7 @@ typedef enum {
 	OPTION_BACKEND,
 	OPTION_COMPOSITING,
 	OPTION_XV_BILINEAR,
+	OPTION_XV_DOUBLEFB,
 	OPTION_DEBUG,
 } IMXOpts;
 
@@ -75,8 +76,6 @@ typedef enum {
 
 #define IMXXV_NUM_PORTS				4U			/* Number of ports supported by this adaptor. */
 #define IMXXV_NUM_PHYS_BUFFERS		(1U << 4)	/* Number of supported physical gstreamer buffers, per port. */
-
-#define IMXXV_DBLFB_ENABLE			1			/* Enable double-buffered full-screen XV. */
 
 typedef struct {
 	intptr_t						phys_ptr;
@@ -107,11 +106,10 @@ typedef struct {
 
 	/* XV acceleration */
 	DevUnion						xvPortPrivate[IMXXV_NUM_PORTS];
-#if IMXXV_DBLFB_ENABLE
 	unsigned						xvBufferTracker;
-#endif
 	XVPortRec						xvPort[IMXXV_NUM_PORTS];
 	Bool							use_bilinear_filtering;
+	Bool							use_double_buffering;
 
 	/* EXA acceleration */
 	imxexa_backend_t				backend;
@@ -133,9 +131,7 @@ typedef struct _IMXEXARec {
 	/* GPU surface for the screen */
 	C2D_SURFACE_DEF	screenSurfDef;
 	C2D_SURFACE		screenSurf;
-#if IMXXV_DBLFB_ENABLE
-	C2D_SURFACE		doubleSurf;
-#endif
+	C2D_SURFACE		doubleSurf;					/* for fullscreen double-buffering clients, eg. XV adaptor */
 
 	/* Parameters originating from PrepareComposite and going into Composite */
 	Bool			composRepeat;
