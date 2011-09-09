@@ -1,3 +1,13 @@
+xserver-xorg-video-imx (2.0.1-201100909) maverick; urgency=low
+
+  * release version (match imx-graphics version)
+  * PictOpAdd, PictOpIn blending modes
+  * Xv double buffering refinements (fullscreen videos will double buffer to reduce tearing)
+  * Xv no longer draws over windows while using a compositing window manager
+  * EXA optimizations, reduce redundant code and improve memory allocation to be less aggressive
+
+ -- Martin Krastev <martin.krastev@genesi-usa.com>  Fri, 09 Sep 2011 13:53:33 -0600
+
 xserver-xorg-video-imx (2.0.0-20110714) maverick; urgency=low
 
   * release version
