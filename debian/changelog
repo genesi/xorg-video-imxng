@@ -1,4 +1,4 @@
-xserver-xorg-video-imx (2.0.1-201100909) maverick; urgency=low
+xserver-xorg-video-imx (2.0.1-20110909) maverick; urgency=low
 
   * release version (match imx-graphics version)
   * PictOpAdd, PictOpIn blending modes
