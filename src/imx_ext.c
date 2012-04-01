@@ -27,6 +27,16 @@
 #include <dixstruct.h>
 #include <extension.h>
 #include <xorg/extnsionst.h>
+#include <xorg/xf86Module.h>
+
+#if GET_ABI_MAJOR(ABI_VIDEODRV_VERSION) < 12
+#	define compat_swapl(x, n) swapl(x,n)
+#	define compat_swaps(x, n) swaps(x,n)
+#else
+#	define compat_swapl(x, n) swapl(x)
+#	define compat_swaps(x, n) swaps(x)
+#endif
+
 
 #include "imx_ext.h"
 
@@ -91,10 +101,10 @@ Proc_IMX_EXT_GetPixmapPhysAddr(ClientPtr client)
 	/* Check if any reply values need byte swapping */
 	if (client->swapped)
 	{
-		swaps(&rep.sequenceNumber, n);
-		swapl(&rep.length, n);
-		swapl(&rep.pixmapPhysAddr, n);
-		swapl(&rep.pixmapPitch, n);
+		compat_swaps(&rep.sequenceNumber, n);
+		compat_swapl(&rep.length, n);
+		compat_swapl(&rep.pixmapPhysAddr, n);
+		compat_swapl(&rep.pixmapPitch, n);
 	}
 
 	/* Reply to client */
@@ -122,10 +132,10 @@ SProc_IMX_EXT_GetPixmapPhysAddr(ClientPtr client)
 
 	REQUEST(xIMX_EXT_GetPixmapPhysAddrReq);
 
-	swaps(&stuff->length, n);
+	compat_swaps(&stuff->length, n);
 	REQUEST_SIZE_MATCH(xIMX_EXT_GetPixmapPhysAddrReq);
 
-	swapl(&stuff->pixmap, n);
+	compat_swapl(&stuff->pixmap, n);
 	return Proc_IMX_EXT_GetPixmapPhysAddr(client);
 }
 
