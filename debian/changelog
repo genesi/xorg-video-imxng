@@ -1,3 +1,10 @@
+xserver-xorg-video-imx (2.0.1-201203) unstable; urgency=low
+
+  * Upload to Debian unstable.
+  * Rebuild with latest imx-graphics.
+
+ -- Konstantinos Margaritis <markos@genesi-usa.com>  Fri, 23 Mar 2012 15:10:48 +0200
+
 xserver-xorg-video-imx (2.0.1-20110909) maverick; urgency=low
 
   * release version (match imx-graphics version)
