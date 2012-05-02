@@ -22,7 +22,7 @@ Standards-Version: 3.9.1
 
 Package: xserver-xorg-video-imx
 Architecture: armel armhf
-Depends: ${shlibs:Depends}, ${misc:Depends}, ${xviddriver:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}, ${xviddriver:Depends}, libc2d-z160-imx, libc2d-z430-imx
 Provides: ${xviddriver:Provides}
 Replaces: xserver-xorg (<< 6.8.2-35), xserver-xorg-driver-imx
 Conflicts: xserver-xorg-driver-imx

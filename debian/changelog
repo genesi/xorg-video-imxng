@@ -1,7 +1,14 @@
-xserver-xorg-video-imx (2.0.1-201203) unstable; urgency=low
+xserver-xorg-video-imx (2.0.1-20120501) unstable; urgency=low
+
+  * Rebuild with new Xorg abi.
+
+ -- Konstantinos Margaritis <markos@genesi-usa.com>  Tue, 01 May 2012 23:35:15 +0000
+
+xserver-xorg-video-imx (2.0.1-20120402) unstable; urgency=low
 
   * Upload to Debian unstable.
   * Rebuild with latest imx-graphics.
+  * Depend on libc2d-*-imx packages
 
  -- Konstantinos Margaritis <markos@genesi-usa.com>  Fri, 23 Mar 2012 15:10:48 +0200
 
