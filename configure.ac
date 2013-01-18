@@ -76,8 +76,8 @@ fi
 AM_CONDITIONAL(NEON, [test "x$NEON" = xyes])
 if test "x$NEON" = xyes; then
     AC_DEFINE(NEON, 1, [Use neon acceleration])
-    XORG_CFLAGS="$XORG_CFLAGS -mfpu=neon"
-    ASFLAGS="$ASFLAGS -mfpu=neon"
+    XORG_CFLAGS="$XORG_CFLAGS -mcpu=cortex-a8 -mfpu=neon"
+    ASFLAGS="$ASFLAGS -mcpu=cortex-a8 -mfpu=neon"
 fi
 
 # Checks for libraries.
