@@ -1,3 +1,9 @@
+xserver-xorg-video-imx (2.0.2-20130206) maverick; urgency=low
+
+  * update recommendations and suggests to bring in libc2d-*-imx libs where relevant
+
+ -- Matt Sealey <matt@genesi-usa.com>  Wed, 06 Feb 2013 17:12:27 -0600
+
 xserver-xorg-video-imx (2.0.1-20110909) maverick; urgency=low
 
   * release version (match imx-graphics version)
