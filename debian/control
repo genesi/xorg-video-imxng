@@ -2,7 +2,7 @@ Source: xserver-xorg-video-imx
 Section: x11
 Priority: optional
 Maintainer: Matt Sealey <matt@genesi-usa.com>
-Uploaders: Steev Klimaszewski <steev@genesi-usa.com>, Konstantinos Margaritis <markos@genesi-usa.com>, Luca Barbato <lu_zero@genesi-usa.com>
+Uploaders: Steev Klimaszewski <steev@genesi-usa.com>, William Schaub <william.schaub@genesi-usa.com>
 Build-Depends:
  debhelper (>= 5.0.0),
  quilt,
@@ -21,11 +21,12 @@ Build-Depends:
 Standards-Version: 3.9.1
 
 Package: xserver-xorg-video-imx
-Architecture: armel
+Architecture: armel armhf
 Depends: ${shlibs:Depends}, ${misc:Depends}, ${xviddriver:Depends}
 Provides: ${xviddriver:Provides}
-Replaces: xserver-xorg (<< 6.8.2-35), xserver-xorg-driver-imx
-Conflicts: xserver-xorg-driver-imx
+Recommends: libc2d-z160-imx
+Suggests: libc2d-z430-imx
+Replaces: xserver-xorg (<< 6.8.2-35)
 Description: X.Org X server -- i.MX display driver
 
 Package: x11proto-imxext-dev
