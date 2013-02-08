@@ -39,7 +39,6 @@
 #include <unistd.h>
 
 #include <linux/fb.h>
-#include <linux/mxcfb.h>
 #include <errno.h>
 #include <string.h>
 

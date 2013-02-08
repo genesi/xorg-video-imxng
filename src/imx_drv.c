@@ -38,8 +38,6 @@
 #include <fcntl.h>
 #include <dlfcn.h>
 #include <string.h>
-#include <linux/fb.h>
-#include <linux/mxcfb.h>
 
 /* all driver need this */
 #include "xf86.h"
