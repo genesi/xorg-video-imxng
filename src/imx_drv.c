@@ -404,11 +404,11 @@ IMXPreInit(ScrnInfoPtr pScrn, int flags)
 		s = xf86GetOptValString(fPtr->options, OPTION_BACKEND);
 		if ((NULL != s) && (0 == xf86NameCmp(s, "Z430"))) {
 			fPtr->backend = IMXEXA_BACKEND_Z430;
-			lib_name = "libc2d_z430.so";
+			lib_name = "libc2d_z430.so.1.0";
 		}
 		else {
 			fPtr->backend = IMXEXA_BACKEND_Z160;
-			lib_name = "libc2d_z160.so";
+			lib_name = "libc2d_z160.so.1.0";
 		}
 
 		if (!dlopen(lib_name, RTLD_NOW | RTLD_GLOBAL))
